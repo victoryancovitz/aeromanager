@@ -62,7 +62,7 @@ const NAV = [
 
   // ââ 2. VOOS (hub da jornada) ââââââââââââââââââââââââââââââââââââââââââââââ
   { section: 'Voos' },
-  { id:'journey',      label:'Todos os Voos',          icon:'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z', highlight: true },
+  { id:'journey',      label:'Hub de Voos',          icon:'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z', highlight: true },
   { id:'tracker', advanced: true,      label:'Voo no Bolso (GPS)',     icon:'M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z' },
   { id:'missions',     label:'MissÃµes & GD',           icon:'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
   { id:'flights',      label:'Registro de Voos',       icon:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
@@ -153,9 +153,7 @@ export default function App() {
   const [openSections, setOpenSections]  = useState(() => {
     const saved = localStorage.getItem('am_page') || 'dashboard';
     const activeSection = getSectionForPage(saved);
-    return new Set(activeSection ? [activeSection] : ['GestÃ£o da Aeronave']);
-  });
-  const [theme, setTheme]               = useState(() => localStorage.getItem('am_theme') || 'dark');
+    return new Set(activeSection ? [activeSection, 'GestÃ£o da Aeronave', 'Voos'] : ['GestÃ£o da Aeronave', 'Voos']);Theme]               = useState(() => localStorage.getItem('am_theme') || 'dark');
 
   // Apply theme
   useEffect(() => {
@@ -277,7 +275,7 @@ export default function App() {
           {!collapsed && (
             <div className="logo-text">
               <div style={{ fontFamily:'var(--font-serif)', fontWeight:400, fontSize:17, color:'var(--text1)', letterSpacing:'.02em' }}>AeroManager</div>
-              <div style={{ fontSize:9.5, color:'var(--text3)', fontWeight:500, letterSpacing:'.1em', textTransform:'uppercase', marginTop:1 }}>v5.40</div>
+              <div style={{ fontSize:9.5, color:'var(--text3)', fontWeight:500, letterSpacing:'.1em', textTransform:'uppercase', marginTop:1 }}>v5.41</div>
             </div>
           )}
         </div>
@@ -505,7 +503,7 @@ export default function App() {
           {page==='costcategories'&& <CostCategories onClose={() => go('costs')} />}
           {page==='flightmap'     && <FlightMap flights={filteredFlights} aircraft={filteredAircraft} crew={crew} />}
           {page==='journey'       && <FlightJourney aircraft={filteredAircraft} reload={reload} setPage={go} />}
-          {page==='aircraft_docs' && <AircraftDocuments aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} onClose={() => go('aircraft')} onImportBatch={() => setShowDocImport(true)} />}
+          {page==='aircraft_docs' && (globalAcFilter === 'all' && !selectedAc ? <div style={{padding:24}}><div style={{fontFamily:'var(--font-serif)',fontSize:22,fontWeight:400,marginBottom:8}}>Documentos da Aeronave</div><div style={{color:'var(--text3)',fontSize:13,marginBottom:20}}>Selecione uma aeronave para ver seus documentos</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12}}>{aircraft.map(ac=>(<button key={ac.id} onClick={()=>{setGlobalAcFilter(ac.id);setSelectedAc(ac);}} style={{padding:16,borderRadius:12,border:'1px solid var(--border)',background:'var(--bg1)',cursor:'pointer',textAlign:'left',transition:'border-color .15s'}} onMouseEnter={e=>e.currentTarget.style.borderColor='var(--blue)'} onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}><div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)',fontSize:15,marginBottom:4}}>{ac.registration}</div><div style={{color:'var(--text3)',fontSize:12}}>{ac.manufacturer} {ac.model}</div><div style={{color:'var(--blue)',fontSize:11,marginTop:8}}>Ver documentos →</div></button>))}</div></div> : <AircraftDocuments aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} onClose={() => go('aircraft')} onImportBatch={() => setShowDocImport(true)} />)}
           {page==='cost_split'   && <CostSplitting aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} />}
           {page==='credit_ledger' && <CreditLedger aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} allAircraft={filteredAircraft} />}
           {page==='email_templates' && <EmailTemplates onClose={() => go('dashboard')} />}
@@ -525,8 +523,7 @@ export default function App() {
           {page==='range'         && <RangeCalculator aircraft={filteredAircraft} />}
           {page==='integrations'  && <Integrations reload={reload} />}
           {page==='fuelprices'    && <FuelPrices aircraft={filteredAircraft} />}
-          {page==='performance'   && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Performance</div><div style={{fontSize:13}}>Em construÃ§Ã£o â tabelas POH por aeronave.<br/>Importe um POH para comeÃ§ar.</div><button className="primary" style={{marginTop:20}} onClick={()=>setShowPOH(true)}>Importar POH</button></div>}
-          {page==='benchmark'     && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Benchmark Conklin & de Decker</div><div style={{fontSize:13}}>Em construÃ§Ã£o â custo real vs. mÃ©dia de mercado por tipo de aeronave.</div></div>}
+          {page==='performance' && <div style={{padding:'32px'}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}><div><div style={{fontFamily:'var(--font-serif)',fontSize:22,fontWeight:400,color:'var(--text1)'}}>Performance</div><div style={{color:'var(--text3)',fontSize:12,marginTop:4}}>Dados técnicos por aeronave — importe o POH para tabelas completas</div></div><button className="primary" onClick={()=>setShowPOH(true)}>📄 Importar POH</button></div><div style={{display:'grid',gap:16}}>{filteredAircraft.map(ac=>(<div key={ac.id} className="card" style={{padding:20}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)',fontSize:18}}>{ac.registration}</div><div style={{color:'var(--text3)',fontSize:13}}>{ac.manufacturer} {ac.model} · {ac.year||'—'}</div></div><span style={{fontSize:11,background:'var(--bg2)',padding:'3px 10px',borderRadius:12,color:'var(--text3)'}}>{ac.type==='single_engine'?'Monomotor':ac.type==='multi_engine'?'Bimotor':'Experimental'}</span></div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:10}}>{[{l:'Motor',v:ac.engine_model||'—'},{l:'TBO Motor',v:ac.engine_tbo_hours?ac.engine_tbo_hours+'h':'—'},{l:'Horas Célula',v:ac.total_flight_hours?Number(ac.total_flight_hours).toFixed(1)+'h':'—'},{l:'Horas Motor',v:ac.total_engine_hours?Number(ac.total_engine_hours).toFixed(1)+'h':'—'},{l:'Ciclos',v:ac.total_cycles||'—'},{l:'Base',v:ac.home_base||'—'},{l:'Combustível',v:ac.fuel_type||'—'},{l:'Capacidade',v:ac.fuel_capacity_liters?ac.fuel_capacity_liters+'L':'—'}].map(({l,v})=>(<div key={l} style={{background:'var(--bg2)',borderRadius:8,padding:'10px 14px'}}><div style={{fontSize:10,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{l}</div><div style={{fontFamily:'var(--font-mono)',color:'var(--text1)',fontWeight:600,fontSize:13}}>{v}</div></div>))}</div></div>))}</div></div>} {page==='benchmark'     && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Benchmark Conklin & de Decker</div><div style={{fontSize:13}}>Em construÃ§Ã£o â custo real vs. mÃ©dia de mercado por tipo de aeronave.</div></div>}
           </>)}
           </ErrorBoundary>
         </React.Suspense>
