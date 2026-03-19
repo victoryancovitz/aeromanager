@@ -111,6 +111,7 @@ class FlightTracker {
       landingTime: null,
       destinationIcao: null,
       maxAltitudeFt: 0,
+      groundAltFt: 0,        // MSL altitude at takeoff — used to compute AGL
       cruiseAltitudeFt: 0,
       currentSpeedKt: 0,
       currentAltFt: 0,
@@ -184,6 +185,13 @@ class FlightTracker {
   state.prevAltFt = state.currentAltFt || altFt;
     state.currentAltFt  = Math.round(altFt);
     state.currentSpeedKt= Math.round(speedKt);
+  // Vertical speed (ft/min) e altitude AGL
+  const intervalMin = TRACKING_INTERVAL / 60000;
+  const vsFpm = intervalMin > 0 ? Math.round((altFt - (state.prevAltFt || altFt)) / intervalMin) : 0;
+  const altAGL = Math.round(altFt - (state.groundAltFt || 0));
+  state.prevAltFt  = altFt;
+  state.currentVsFpm = vsFpm;
+  state.currentAltAGL = altAGL;
     state.maxAltitudeFt = Math.max(state.maxAltitudeFt || 0, altFt);
 
     // Calculate distance from track
@@ -198,7 +206,7 @@ class FlightTracker {
 
     // ── State machine ──────────────────────────────────────────
     if (state.status === 'waiting_takeoff') {
-      if (speedKt >= TAKEOFF_SPEED_KT) {
+      if (speedKt >= TAKEOFF_SPEED_KT && vsFpm >= 0) {
         if (!this.stateConfirmStart) {
           this.stateConfirmStart = Date.now();
           this.pendingState      = 'airborne';
@@ -219,7 +227,7 @@ class FlightTracker {
 
     else if (state.status === 'airborne') {
       // Detect landing
-      if (speedKt < LANDING_SPEED_KT && Math.abs(altFt - (state.prevAltFt || altFt)) < 100) {
+      if (speedKt < LANDING_SPEED_KT && (altFt - (state.groundAltFt || 0)) < 500) {
         if (!this.stateConfirmStart) {
           this.stateConfirmStart = Date.now();
           this.pendingState      = 'landed';
