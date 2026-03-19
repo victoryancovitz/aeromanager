@@ -270,14 +270,74 @@ export default function CostSplitting({ aircraft }) {
   const splitEntries = Object.values(splits);
 
   // ── No co-owners ─────────────────────────────────────────
+  // Estado para o formulario de adicionar socio
+  const [showAddOwner, setShowAddOwner] = React.useState(false);
+  const [newOwnerName, setNewOwnerName] = React.useState('');
+  const [newOwnerEmail, setNewOwnerEmail] = React.useState('');
+  const [newOwnerPct, setNewOwnerPct] = React.useState('');
+  const [addingOwner, setAddingOwner] = React.useState(false);
+
+  async function handleAddOwner() {
+    if (!newOwnerName || !newOwnerPct) return;
+    setAddingOwner(true);
+    try {
+      const user = await getUser();
+      const { error } = await supabase.from('aircraft_co_owners').insert({
+        aircraft_id: aircraft.id,
+        display_name: newOwnerName,
+        email: newOwnerEmail || null,
+        share_pct: parseFloat(newOwnerPct),
+        role: 'owner',
+        joined_at: new Date().toISOString().slice(0,10),
+      });
+      if (error) throw error;
+      setNewOwnerName(''); setNewOwnerEmail(''); setNewOwnerPct('');
+      setShowAddOwner(false);
+      load();
+    } catch(e) { setError(e.message); }
+    setAddingOwner(false);
+  }
+
   if (!loading && owners.length === 0) return (
-    <div style={{ padding:'40px', textAlign:'center', color:'var(--text3)' }}>
-      <div style={{ fontSize:40, marginBottom:16 }}>🤝</div>
-      <div style={{ fontSize:14, fontWeight:500, marginBottom:8 }}>Nenhum co-proprietário cadastrado</div>
-      <div style={{ fontSize:12, lineHeight:1.7 }}>
-        Esta funcionalidade é para aeronaves com múltiplos sócios.<br/>
-        Adicione os sócios na configuração da aeronave.
+    <div style={{ padding:'32px 24px' }}>
+      <div style={{ textAlign:'center', marginBottom:32 }}>
+        <div style={{ fontSize:40, marginBottom:12 }}>🤝</div>
+        <div style={{ fontSize:16, fontWeight:600, marginBottom:6 }}>Nenhum sócio cadastrado</div>
+        <div style={{ fontSize:13, color:'var(--text3)', lineHeight:1.7 }}>
+          Adicione os sócios para começar o rateio de custos da {aircraft?.registration}.
+        </div>
       </div>
+      {!showAddOwner ? (
+        <div style={{ textAlign:'center' }}>
+          <button onClick={() => setShowAddOwner(true)} style={{ padding:'10px 24px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600, cursor:'pointer' }}>
+            + Adicionar primeiro sócio
+          </button>
+        </div>
+      ) : (
+        <div style={{ maxWidth:420, margin:'0 auto', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:14, padding:24 }}>
+          <div style={{ fontSize:14, fontWeight:600, marginBottom:20 }}>Novo sócio / co-proprietário</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            <div>
+              <label style={{ display:'block', fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:600, textTransform:'uppercase' }}>Nome completo *</label>
+              <input value={newOwnerName} onChange={e=>setNewOwnerName(e.target.value)} placeholder="Nome do sócio" style={{ width:'100%', padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text1)', fontSize:13 }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:600, textTransform:'uppercase' }}>E-mail (opcional)</label>
+              <input value={newOwnerEmail} onChange={e=>setNewOwnerEmail(e.target.value)} placeholder="email@exemplo.com" type="email" style={{ width:'100%', padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text1)', fontSize:13 }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:600, textTransform:'uppercase' }}>Cota de propriedade (%) *</label>
+              <input value={newOwnerPct} onChange={e=>setNewOwnerPct(e.target.value)} placeholder="Ex: 50" type="number" min="1" max="100" style={{ width:'100%', padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text1)', fontSize:13 }} />
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:4 }}>
+              <button onClick={handleAddOwner} disabled={addingOwner || !newOwnerName || !newOwnerPct} style={{ flex:1, padding:'10px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', opacity:(!newOwnerName||!newOwnerPct)?0.5:1 }}>
+                {addingOwner ? 'Salvando...' : 'Salvar sócio'}
+              </button>
+              <button onClick={() => setShowAddOwner(false)} style={{ padding:'10px 16px', background:'transparent', color:'var(--text3)', border:'1px solid var(--border)', borderRadius:9, fontSize:13, cursor:'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
