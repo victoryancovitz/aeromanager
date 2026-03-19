@@ -213,6 +213,7 @@ class FlightTracker {
         } else if (Date.now() - this.stateConfirmStart > CONFIRM_SECS * 1000) {
           // Confirmed takeoff!
           state.status      = 'airborne';
+              state.groundAltFt = altFt; // MSL altitude at takeoff for AGL
           state.takeoffTime = now;
           state.lastPhase   = 'climb';
           state.phases.push({ phase: 'climb', startTime: now, startAltFt: altFt });
