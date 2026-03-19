@@ -153,7 +153,7 @@ export default function App() {
   const [openSections, setOpenSections]  = useState(() => {
     const saved = localStorage.getItem('am_page') || 'dashboard';
     const activeSection = getSectionForPage(saved);
-    return new Set(activeSection ? [activeSection] : ['GestÃ£o da Aeronave']);
+    return new Set(activeSection ? [activeSection, 'Gestão da Aeronave', 'Voos'] : ['Gestão da Aeronave', 'Voos']);
   });
   const [theme, setTheme]               = useState(() => localStorage.getItem('am_theme') || 'dark');
 
@@ -506,7 +506,7 @@ export default function App() {
           {page==='flightmap'     && <FlightMap flights={filteredFlights} aircraft={filteredAircraft} crew={crew} />}
           {page==='journey'       && <FlightJourney aircraft={filteredAircraft} reload={reload} setPage={go} />}
           {page==='aircraft_docs' && (globalAcFilter === 'all' && !selectedAc ? (<div style={{padding:24}}><div style={{fontFamily:'var(--font-serif)',fontSize:22,fontWeight:400,marginBottom:20}}>Documentos da Aeronave</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12}}>{aircraft.map(ac=>(<button key={ac.id} onClick={()=>{setGlobalAcFilter(ac.id);setSelectedAc(ac);}} style={{padding:16,borderRadius:12,border:'1px solid var(--border)',background:'var(--bg1)',cursor:'pointer',textAlign:'left'}}><div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)',fontSize:15,marginBottom:4}}>{ac.registration}</div><div style={{color:'var(--text3)',fontSize:12}}>{ac.manufacturer} {ac.model}</div></button>))}</div></div>) : <AircraftDocuments aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} onClose={() => go('aircraft')} onImportBatch={() => setShowDocImport(true)} />)}
-          {page==='cost_split'   && <CostSplitting aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} />}
+          {page==='cost_split' && (globalAcFilter === 'all' && !selectedAc ? (<div style={{padding:24}}><div style={{fontFamily:'var(--font-serif)',fontSize:22,fontWeight:400,marginBottom:20}}>Rateio entre Socios</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12}}>{aircraft.map(ac=>(<button key={ac.id} onClick={()=>{setGlobalAcFilter(ac.id);setSelectedAc(ac);}} style={{padding:16,borderRadius:12,border:'1px solid var(--border)',background:'var(--bg1)',cursor:'pointer',textAlign:'left'}}><div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)',fontSize:15,marginBottom:4}}>{ac.registration}</div><div style={{color:'var(--text3)',fontSize:12}}>{ac.manufacturer} {ac.model}</div></button>))}</div></div>) : <CostSplitting aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} />)}
           {page==='credit_ledger' && <CreditLedger aircraft={(globalAcFilter !== 'all' ? filteredAircraft[0] : null) || selectedAc || aircraft[0]} allAircraft={filteredAircraft} />}
           {page==='email_templates' && <EmailTemplates onClose={() => go('dashboard')} />}
           {page==='custom_alerts'   && <CustomAlerts   onClose={() => go('dashboard')} />}
