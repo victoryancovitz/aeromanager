@@ -4,14 +4,21 @@ import { saveFlight, deleteFlight } from '../store';
 import { AcIcon } from './Instruments';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import IcaoInput from './IcaoInput';
+import LogbookImportWizard from './LogbookImportWizard';
 
-const EMPTY = { aircraftId:'', departureIcao:'', destinationIcao:'', alternateIcao:'', date:new Date().toISOString().slice(0,10), takeoffUtc:'', landingUtc:'', flightTimeMinutes:0, distanceNm:'', fuelAddedLiters:'', fuelPricePerLiter:'', cruiseAltitudeFt:'', flightConditions:'vfr', purpose:'leisure', cycles:1, logbookNotes:'' };
+const EMPTY = {
+  aircraftId:'', departureIcao:'', destinationIcao:'', alternateIcao:'',
+  date:new Date().toISOString().slice(0,10), takeoffUtc:'', landingUtc:'',
+  flightTimeMinutes:0, distanceNm:'', fuelAddedLiters:'', fuelPricePerLiter:'',
+  cruiseAltitudeFt:'', flightConditions:'vfr', purpose:'leisure', cycles:1, logbookNotes:''
+};
 
 export default function Flights({ flights=[], aircraft=[], costs=[], reload, setPage, setPreselFlight }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [showLogbookImport, setShowLogbookImport] = useState(false);
   const ms = useMultiSelect(flights);
 
   function calcMins(t, l) {
@@ -19,23 +26,34 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
     const d = (new Date(`${form.date}T${l}:00Z`) - new Date(`${form.date}T${t}:00Z`)) / 60000;
     return d > 0 ? Math.round(d) : 0;
   }
+
   function set(k, v) {
     setForm(f => {
       const n = {...f, [k]:v};
-      if (k==='takeoffUtc'||k==='landingUtc') n.flightTimeMinutes = calcMins(k==='takeoffUtc'?v:f.takeoffUtc, k==='landingUtc'?v:f.landingUtc);
+      if (k==='takeoffUtc'||k==='landingUtc')
+        n.flightTimeMinutes = calcMins(k==='takeoffUtc'?v:f.takeoffUtc, k==='landingUtc'?v:f.landingUtc);
       return n;
     });
   }
+
   function startNew() { setForm({...EMPTY, aircraftId: aircraft[0]?.id||''}); setEditing('new'); }
   function startEdit(f) { setForm({...f}); setEditing(f.id); }
   function cancel() { setEditing(null); }
+
   async function submit(e) {
     e.preventDefault();
     const saved = await saveFlight({...form, fuelAddedLiters:parseFloat(form.fuelAddedLiters)||0, fuelPricePerLiter:parseFloat(form.fuelPricePerLiter)||0});
-    reload(); setEditing(null);
-    if (window.confirm('Voo salvo! Deseja lançar os custos agora?')) { setPreselFlight(saved); setPage('costs'); }
+    reload();
+    setEditing(null);
+    if (window.confirm('Voo salvo! Deseja lançar os custos agora?')) {
+      setPreselFlight(saved);
+      setPage('costs');
+    }
   }
-  async function remove(id) { if(window.confirm('Remover voo?')){ await deleteFlight(id); reload(); } }
+
+  async function remove(id) {
+    if(window.confirm('Remover voo?')){ await deleteFlight(id); reload(); }
+  }
 
   async function bulkDelete() {
     const n = ms.count;
@@ -51,7 +69,7 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
     return [f.departureIcao,f.destinationIcao,f.date,ac?.registration||''].join(' ').toLowerCase().includes(search.toLowerCase());
   }).sort((a,b) => b.date.localeCompare(a.date));
 
-
+  // ── FORM VIEW ──
   if (editing !== null) {
     const h = Math.floor(form.flightTimeMinutes/60), m = form.flightTimeMinutes%60;
     const fuelCost = (parseFloat(form.fuelAddedLiters)||0)*(parseFloat(form.fuelPricePerLiter)||0);
@@ -112,6 +130,7 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
     );
   }
 
+  // ── LIST VIEW ──
   return (
     <div style={{ padding:24 }}>
       {ms.count > 0 && (
@@ -124,21 +143,38 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
           <button className="ghost" onClick={ms.clear} style={{ fontSize:12 }}>Cancelar</button>
         </div>
       )}
+
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
         <div>
           <div style={{ fontFamily:'var(--font-serif)', fontSize:22, fontWeight:400 }}>Registro de Voos</div>
           <div style={{ color:'var(--text3)', fontSize:12, marginTop:2 }}>{flights.length} voo(s) registrado(s)</div>
         </div>
-        <div style={{ display:'flex', gap:10 }}>
+        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
           <input placeholder="Buscar rota, matrícula..." value={search} onChange={e=>setSearch(e.target.value)} style={{ width:220 }} />
+          <button
+            onClick={() => setShowLogbookImport(true)}
+            style={{
+              display:'flex', alignItems:'center', gap:6,
+              padding:'8px 14px', borderRadius:8,
+              background:'var(--bg2)', border:'1px solid var(--border)',
+              color:'var(--text2)', cursor:'pointer', fontSize:13, fontWeight:600,
+              whiteSpace:'nowrap'
+            }}
+          >
+            📖 Importar do Diário
+          </button>
           {aircraft.length>0 && <button className="primary" onClick={startNew}>+ Registrar voo</button>}
         </div>
       </div>
+
       {filtered.length===0 ? (
         <div className="card" style={{ padding:'40px 20px', textAlign:'center', color:'var(--text3)' }}>
           <div style={{ fontSize:32, marginBottom:10 }}>📋</div>
           <div style={{ fontWeight:600 }}>Nenhum voo registrado</div>
-          {aircraft.length===0 ? <div style={{ marginTop:8, fontSize:12 }}>Cadastre uma aeronave primeiro</div> : <button className="primary" style={{ marginTop:16 }} onClick={startNew}>Registrar primeiro voo</button>}
+          {aircraft.length===0
+            ? <div style={{ marginTop:8, fontSize:12 }}>Cadastre uma aeronave primeiro</div>
+            : <button className="primary" style={{ marginTop:16 }} onClick={startNew}>Registrar primeiro voo</button>
+          }
         </div>
       ) : (
         <div className="card" style={{ overflow:'hidden', padding:0 }}>
@@ -181,6 +217,17 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* LogbookImportWizard */}
+      {showLogbookImport && (
+        <LogbookImportWizard
+          onClose={() => setShowLogbookImport(false)}
+          onImported={(count) => {
+            setShowLogbookImport(false);
+            reload();
+          }}
+        />
       )}
     </div>
   );
