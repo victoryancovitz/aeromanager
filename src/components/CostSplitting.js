@@ -267,6 +267,38 @@ export default function CostSplitting({ aircraft }) {
 
   const totalCosts   = costs.reduce((s,c) => s + parseFloat(c.amount_brl||0), 0);
   const totalHours   = flights.reduce((s,f) => s + (f.flight_time_minutes||0), 0);
+    async function handleMarkPaid(cost) {
+    const user = await getUser();
+    if(!user) return;
+    const payerName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Proprietario';
+    const amt = parseFloat(cost.amount_brl)||0;
+    const rule = cost.split_rule||'equal';
+    const totalMins = flights.reduce((s,f)=>s+(f.flight_time_minutes||0),0);
+    const debits=[];
+    for(const o of owners){
+      if(o.user_id===user.id) continue;
+      let share=0;
+      if(rule==='equal') share=(o.share_pct/100)*amt;
+      else if(rule==='proportional_hours'){
+        const om=splits[o.id]?.hours||0;
+        share=totalMins>0?(om/totalMins)*amt:(o.share_pct/100)*amt;
+      } else continue;
+      if(share<0.01) continue;
+      debits.push({aircraft_id:aircraft.id,user_id:user.id,
+        creditor_name:payerName,creditor_user_id:user.id,
+        debtor_name:o.display_name,debtor_user_id:o.user_id||null,
+        amount_brl:Math.round(share*100)/100,hours_credit:0,
+        origin_type:'cost_overpayment',origin_cost_id:cost.id,status:'pending',
+        description:o.display_name+' deve R$'+(Math.round(share*100)/100).toFixed(2)+' ('+o.share_pct+'% de '+cost.description+')'});
+    }
+    if(!debits.length){alert('Nenhum debito gerado.');return;}
+    const{error}=await supabase.from('credit_ledger').insert(debits);
+    if(error){alert('Erro: '+error.message);return;}
+    alert('✅ '+debits.length+' debito(s) lancado(s) no Acerto de Contas:
+'+debits.map(d=>d.debtor_name+': R$'+d.amount_brl.toFixed(2)).join('
+'));
+  }
+
   const splitEntries = Object.values(splits);
 
   // ── No co-owners ─────────────────────────────────────────
@@ -537,7 +569,7 @@ export default function CostSplitting({ aircraft }) {
                         style={{ padding:'4px 10px', fontSize:10, borderRadius:6, border:`1px solid ${info.color}33`, background:'transparent', color:info.color, cursor:'pointer', flexShrink:0, fontWeight:500 }}>
                         {info.label}
                       </button>
-                      <button onClick={() => handleMarkPaid(cost)} title="Eu paguei — gera débitos para os outros sócios" style={{padding:'4px 8px',fontSize:10,borderRadius:6,border:'1px solid #22c55e55',background:'transparent',color:'#22c55e',cursor:'pointer',flexShrink:0,fontWeight:500}}>💸 Eu paguei</button>
+                      <button onClick={()=>handleMarkPaid(cost)} title="Eu paguei - gera debitos para os outros socios" style={{padding:'4px 8px',fontSize:10,borderRadius:6,border:'1px solid #22c55e44',background:'transparent',color:'#16a34a',cursor:'pointer',flexShrink:0,fontWeight:500}}>💸 Eu paguei</button>
                     )}
                   </div>
                 );
