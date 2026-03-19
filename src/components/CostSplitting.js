@@ -537,6 +537,7 @@ export default function CostSplitting({ aircraft }) {
                         style={{ padding:'4px 10px', fontSize:10, borderRadius:6, border:`1px solid ${info.color}33`, background:'transparent', color:info.color, cursor:'pointer', flexShrink:0, fontWeight:500 }}>
                         {info.label}
                       </button>
+                      <button onClick={() => {'cost_overpayment' && handleEuPaguei(cost);}} title="Eu paguei este custo" style={{ padding:'4px 8px', fontSize:10, borderRadius:6, border:'1px solid #22c55e44', background:'transparent', color:'#16a34a', cursor:'pointer', flexShrink:0, fontWeight:500 }}>💸 Eu paguei</button>
                     )}
                   </div>
                 );
