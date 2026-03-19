@@ -1,3 +1,4 @@
+import { seedAirportCache } from './tracker';
 import { supabase } from './supabase';
 
 // ── Auth helpers ──────────────────────────────────────────────
