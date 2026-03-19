@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AeroManager Beta — Gestão Inteligente de Aeronaves</title>
+<meta name="description" content="Plataforma brasileira de gestão de aviação geral. Controle sua aeronave, voos, manutenção e custos com inteligência artificial.">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#080d18;color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;}
+  .bg{position:fixed;inset:0;background:radial-gradient(ellipse at 20% 30%,rgba(29,78,216,.12) 0%,transparent 60%),radial-gradient(ellipse at 80% 70%,rgba(124,58,237,.08) 0%,transparent 50%);pointer-events:none;}
+  .wrap{max-width:600px;margin:0 auto;padding:40px 24px 80px;}
+  
+  /* Header */
+  .header{text-align:center;margin-bottom:48px;}
+  .logo{display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;background:linear-gradient(135deg,#1d4ed8,#2563eb);border-radius:20px;margin-bottom:20px;box-shadow:0 8px 40px rgba(29,78,216,.4);}
+  .logo svg{width:40px;height:40px;}
+  h1{font-size:36px;font-weight:700;letter-spacing:-.5px;margin-bottom:8px;background:linear-gradient(135deg,#f1f5f9,#93c5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .sub{color:#64748b;font-size:14px;text-transform:uppercase;letter-spacing:2px;font-weight:500;}
+  
+  /* Badge */
+  .badge{display:inline-block;background:linear-gradient(135deg,rgba(29,78,216,.2),rgba(124,58,237,.2));border:1px solid rgba(29,78,216,.4);border-radius:100px;padding:8px 24px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#93c5fd;margin:20px 0;}
+  
+  /* Headline */
+  .headline{font-size:22px;font-weight:600;color:#e2e8f0;line-height:1.5;text-align:center;margin-bottom:12px;}
+  .desc{color:#64748b;font-size:15px;line-height:1.7;text-align:center;margin-bottom:40px;}
+  
+  /* Features grid */
+  .features{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:40px;}
+  .feat{background:rgba(15,23,42,.8);border:1px solid #1e2d4a;border-radius:14px;padding:16px 18px;display:flex;align-items:flex-start;gap:12px;}
+  .feat-icon{font-size:22px;flex-shrink:0;}
+  .feat-title{color:#e2e8f0;font-size:13px;font-weight:600;margin-bottom:3px;}
+  .feat-desc{color:#475569;font-size:12px;line-height:1.5;}
+  
+  /* Profiles */
+  .profiles{margin-bottom:40px;}
+  .profiles h2{color:#94a3b8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;}
+  .profile-list{display:flex;flex-wrap:wrap;gap:8px;}
+  .profile{background:#0f172a;border:1px solid #1e2d4a;border-radius:100px;padding:6px 14px;font-size:12px;color:#64748b;}
+  .profile.active{background:rgba(29,78,216,.1);border-color:rgba(29,78,216,.4);color:#93c5fd;}
+  
+  /* Form */
+  .form-card{background:rgba(15,23,42,.95);border:1px solid #1e2d4a;border-radius:20px;padding:32px;backdrop-filter:blur(20px);}
+  .form-card h2{color:#f1f5f9;font-size:18px;font-weight:700;margin-bottom:6px;}
+  .form-card p{color:#64748b;font-size:13px;margin-bottom:24px;}
+  .field{margin-bottom:16px;}
+  label{display:block;font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+  input,select{width:100%;padding:12px 14px;background:#0a1628;border:1px solid #1e3a5f;border-radius:10px;color:#f1f5f9;font-size:14px;outline:none;transition:border-color .15s;font-family:inherit;}
+  input:focus,select:focus{border-color:#3b82f6;}
+  select option{background:#0a1628;}
+  .btn{width:100%;padding:14px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:all .15s;box-shadow:0 4px 20px rgba(29,78,216,.35);}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(29,78,216,.5);}
+  .btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+  
+  /* Success */
+  .success{text-align:center;padding:20px 0;}
+  .success-icon{font-size:52px;margin-bottom:16px;}
+  .success h3{color:#f1f5f9;font-size:20px;font-weight:700;margin-bottom:8px;}
+  .success p{color:#64748b;font-size:14px;line-height:1.7;}
+  
+  /* Error */
+  .error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:16px;}
+  
+  /* Footer */
+  .footer{text-align:center;margin-top:40px;color:#1e2d4a;font-size:12px;}
+  
+  @media(max-width:480px){
+    .features{grid-template-columns:1fr;}
+    h1{font-size:28px;}
+    .headline{font-size:18px;}
+  }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+    </div>
+    <h1>AeroManager</h1>
+    <div class="sub">Gestão Inteligente de Aeronaves</div>
+    <div class="badge">✦ Programa Beta 2026</div>
+    <p class="headline">A plataforma que os pilotos brasileiros estavam esperando</p>
+    <p class="desc">Controle sua aeronave, registre voos, gerencie manutenção e custos — tudo com inteligência artificial, desenvolvido no Brasil 🇧🇷 para a aviação geral.</p>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <div class="feat"><div class="feat-icon">✈️</div><div><div class="feat-title">Diário de Bordo</div><div class="feat-desc">Registre voos, importe fotos do diário com IA</div></div></div>
+    <div class="feat"><div class="feat-icon">🔧</div><div><div class="feat-title">Manutenção & MX</div><div class="feat-desc">TBO, inspeções, CVA e alertas automáticos</div></div></div>
+    <div class="feat"><div class="feat-icon">💰</div><div><div class="feat-title">Controle de Custos</div><div class="feat-desc">Custo/hora real, rateio entre sócios</div></div></div>
+    <div class="feat"><div class="feat-icon">🤖</div><div><div class="feat-title">CoPiloto IA</div><div class="feat-desc">Assistente que conhece sua aeronave</div></div></div>
+    <div class="feat"><div class="feat-icon">📄</div><div><div class="feat-title">Documentos</div><div class="feat-desc">CVA, seguro, CIV com alertas de validade</div></div></div>
+    <div class="feat"><div class="feat-icon">👥</div><div><div class="feat-title">Multi-proprietário</div><div class="feat-desc">Co-propriedade, gestão de frota</div></div></div>
+  </div>
+
+  <!-- Profiles -->
+  <div class="profiles">
+    <h2>Para quem é o AeroManager?</h2>
+    <div class="profile-list">
+      <span class="profile active">✈ Proprietário-Piloto</span>
+      <span class="profile active">👥 Co-proprietário</span>
+      <span class="profile active">🏢 Gestora de frota</span>
+      <span class="profile active">🎓 Piloto autorizado</span>
+      <span class="profile">🏛 Aeroclube</span>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div class="form-card">
+    <div id="form-area">
+      <h2>Solicitar acesso beta</h2>
+      <p>Preencha seus dados e entraremos em contato com seu convite exclusivo.</p>
+      <div id="error-msg" class="error" style="display:none;"></div>
+      <div class="field">
+        <label>Nome completo</label>
+        <input type="text" id="f-name" placeholder="Seu nome completo" required>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="f-email" placeholder="seu@email.com" required>
+      </div>
+      <div class="field">
+        <label>Tipo de uso</label>
+        <select id="f-profile">
+          <option value="owner_pilot">Proprietário-Piloto — tenho minha aeronave</option>
+          <option value="co_owner">Co-proprietário — aeronave compartilhada</option>
+          <option value="manager">Gestora / Operadora — administro frotas</option>
+          <option value="authorized_pilot">Piloto Autorizado — voo em aeronave de terceiro</option>
+          <option value="other">Outro interesse</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Matrícula da aeronave (opcional)</label>
+        <input type="text" id="f-reg" placeholder="PP-XXX" maxlength="8" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <button class="btn" id="submit-btn" onclick="submitForm()">🚀 Quero meu acesso beta</button>
+    </div>
+    <div id="success-area" class="success" style="display:none;">
+      <div class="success-icon">🎉</div>
+      <h3>Solicitação recebida!</h3>
+      <p>Obrigado, <strong id="success-name"></strong>!<br>Seu convite será enviado para <strong id="success-email"></strong> em breve.<br><br>Fique de olho na caixa de entrada — e no spam também! ✈️</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    © 2026 AeroManager · Desenvolvido no Brasil 🇧🇷 · <a href="https://aeromanager-psi.vercel.app" style="color:#1e3a5f;">Já tenho conta</a>
+  </div>
+</div>
+
+<script>
+async function submitForm() {
+  const name = document.getElementById('f-name').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const profile = document.getElementById('f-profile').value;
+  const reg = document.getElementById('f-reg').value.trim();
+  const errDiv = document.getElementById('error-msg');
+  const btn = document.getElementById('submit-btn');
+
+  if (!name || !email) { errDiv.textContent = 'Por favor, preencha nome e email.'; errDiv.style.display='block'; return; }
+  if (!email.includes('@')) { errDiv.textContent = 'Email inválido.'; errDiv.style.display='block'; return; }
+
+  errDiv.style.display='none';
+  btn.disabled = true;
+  btn.textContent = '⏳ Enviando...';
+
+  try {
+    const resp = await fetch('https://jvesxkmlxpxpcilzqacz.supabase.co/functions/v1/send-beta-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email, name,
+        profile_type: profile,
+        admin_key: 'aero2026beta',
+        notes: reg ? 'Aeronave: ' + reg : ''
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      document.getElementById('success-name').textContent = name.split(' ')[0];
+      document.getElementById('success-email').textContent = email;
+      document.getElementById('form-area').style.display = 'none';
+      document.getElementById('success-area').style.display = 'block';
+    } else {
+      throw new Error(data.error || 'Erro ao enviar');
+    }
+  } catch(err) {
+    errDiv.textContent = 'Erro ao processar. Tente novamente.';
+    errDiv.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '🚀 Quero meu acesso beta';
+  }
+}
+</script>
+</body>
+</html>
