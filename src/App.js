@@ -314,6 +314,10 @@ export default function App() {
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d={item.icon}/></svg>
                       {item.id==='maintenance' && alerts > 0 && <div style={{ position:'absolute', width:6, height:6, borderRadius:'50%', background:'var(--red)', top:4, right:4 }} />}
                     </button>
+            <button onClick={()=>go('credit_ledger')} style={{display:'flex',alignItems:'center',gap:8,width:'100%',background:page==='credit_ledger'?'var(--blue-dim)':'transparent',color:page==='credit_ledger'?'var(--blue)':'var(--text2)',border:'none',borderRadius:8,padding:'7px 12px 7px 32px',fontSize:13,cursor:'pointer',fontWeight:page==='credit_ledger'?600:400,textAlign:'left'}}>
+              {page==='credit_ledger' && <span style={{color:'var(--blue)',fontWeight:700,fontSize:11}}>●</span>}
+              🔄 Acerto de contas
+            </button>
                   );
                 });
               } else {
