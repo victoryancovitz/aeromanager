@@ -281,8 +281,8 @@ export default function FlightTrackerPage({ reload, setPage }) {
               { label: 'Velocidade', value: `${state.currentSpeedKt || 0} kt`, color: '#4a9eff' },
               { label: 'Altitude', value: `${(state.currentAltFt || 0).toLocaleString('pt-BR')} ft`, color: '#f5a623' },
               { label: 'Distância', value: `${(state.distanceNm || 0).toFixed(1)} nm`, color: '#9b6dff' },
-              { label: 'Alt. máxima', value: `${Math.round(state.maxAltitudeFt || 0).toLocaleString('pt-BR')} ft`, color: '#9aa0b8' },
-              { label: 'Fase', value: state.lastPhase === 'climb' ? '↑ Subida' : state.lastPhase === 'descent' ? '↓ Descida' : '→ Cruzeiro', color: '#9aa0b8' },
+              { label: 'Razao V/S', value: (state.currentVsFpm > 0 ? '+' : '') + (state.currentVsFpm || 0) + ' ft/min', color: state.currentVsFpm > 200 ? '#3dd68c' : state.currentVsFpm < -200 ? '#ff6b6b' : '#9aa0b8' },
+              { label: 'Alt AGL', value: (state.currentAltAGL || 0).toLocaleString('pt-BR') + ' ft', color: '#f5a623' },
             ].map(s => (
               <div key={s.label} style={{ background: '#0f1117', borderRadius: 8, padding: '10px 8px', textAlign: 'center' }}>
                 <div style={{ fontSize: 9, color: '#5a6080', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>{s.label}</div>
