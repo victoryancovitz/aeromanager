@@ -48,48 +48,48 @@ const EmailTemplates       = React.lazy(() => import('./components/EmailTemplate
 const CustomAlerts         = React.lazy(() => import('./components/CustomAlerts'));
 
 const NAV = [
-  // ââ 1. GESTÃO DA AERONAVE âââââââââââââââââââââââââââââââââââââââââââââââââ
-  { section: 'GestÃ£o da Aeronave' },
+  // —— 1. GESTÃO DA AERONAVE —————————————————————————————————————————————————
+  { section: 'Gestão da Aeronave' },
   { id:'dashboard',    label:'Dashboard',              icon:'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
   { id:'aircraft',     label:'Aeronaves',              icon:'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z' },
-  { id:'maintenance',  label:'ManutenÃ§Ã£o & MX',        icon:'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z' },
+  { id:'maintenance',  label:'Manutenção & MX',        icon:'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z' },
   { id:'components',   label:'Mapa de Componentes',    icon:'M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z' },
-  { id:'engineevents', label:'HistÃ³rico de Motor',     icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z' },
+  { id:'engineevents', label:'Histórico de Motor',     icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z' },
   { id:'performance',  label:'Performance',            icon:'M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z' },
-  { id:'cost_split',   label:'Rateio entre sÃ³cios',    icon:'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
+  { id:'cost_split',   label:'Rateio entre sócios',    icon:'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
   { id:'costs',        label:'Custos Fixos',           icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z' },
   { id:'aircraft_docs', label:'Documentos da Aeronave',  icon:'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z' },
 
-  // ââ 2. VOOS (hub da jornada) ââââââââââââââââââââââââââââââââââââââââââââââ
+  // —— 2. VOOS (hub da jornada) ——————————————————————————————————————————————
   { section: 'Voos' },
   { id:'journey',      label:'Todos os Voos',          icon:'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z', highlight: true },
   { id:'tracker', advanced: true,      label:'Voo no Bolso (GPS)',     icon:'M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z' },
-  { id:'missions',     label:'MissÃµes & GD',           icon:'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
+  { id:'missions',     label:'Missões & GD',           icon:'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
   { id:'flights',      label:'Registro de Voos',       icon:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
   { id:'flightmap', advanced: true,    label:'Mapa de Voos',           icon:'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z' },
-  { id:'logbook', advanced: true,      label:'DiÃ¡rio de Bordo ANAC',   icon:'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z' },
-  { id:'civ', advanced: true,          label:'CIV â Caderneta Indiv.', icon:'M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v1h20v-1c0-3.3-6.7-5-10-5z' },
-  { id:'range', advanced: true,        label:'Alcance & CombustÃ­vel',  icon:'M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z' },
+  { id:'logbook', advanced: true,      label:'Diário de Bordo ANAC',   icon:'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z' },
+  { id:'civ', advanced: true,          label:'CIV — Caderneta Indiv.', icon:'M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v1h20v-1c0-3.3-6.7-5-10-5z' },
+  { id:'range', advanced: true,        label:'Alcance & Combustível',  icon:'M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z' },
   { id:'costindex', advanced: true,    label:'Cost Index',             icon:'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z' },
-  { id:'fbo', advanced: true,          label:'FBO & CotaÃ§Ãµes',         icon:'M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z' },
+  { id:'fbo', advanced: true,          label:'FBO & Cotações',         icon:'M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z' },
   { id:'airports', advanced: true,     label:'Aeroportos & Taxas',     icon:'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z' },
-  { id:'fuelprices', advanced: true,   label:'PreÃ§os CombustÃ­vel',     icon:'M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM18 10c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 18v-4.5H6L10 6v5h2L8 18z' },
+  { id:'fuelprices', advanced: true,   label:'Preços Combustível',     icon:'M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM18 10c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 18v-4.5H6L10 6v5h2L8 18z' },
 
-  // ââ 4. CONFIGURAÃÃES & CADASTROS ââââââââââââââââââââââââââââââââââââââââââ
-  { section: 'ConfiguraÃ§Ãµes & Cadastros' },
+  // —— 4. CONFIGURAÇÕES & CADASTROS ——————————————————————————————————————————
+  { section: 'Configurações & Cadastros' },
   { id:'aircraftdb', advanced: true,   label:'Base de Aeronaves',      icon:'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12zM5 10h9v2H5zm0-3h9v2H5zm0 6h6v2H5zm10 0l4-4-4-4v3h-2v2h2z' },
   { id:'email_templates', label:'Templates de E-mail',    icon:'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z' },
   { id:'custom_alerts',   label:'Alertas Personalizados', icon:'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z' },
-  { id:'crew',         label:'TripulaÃ§Ã£o & Docs',      icon:'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
+  { id:'crew',         label:'Tripulação & Docs',      icon:'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
   { id:'costcategories', advanced: true, label:'Categorias de Custo',  icon:'M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z' },
-  { id:'pricing', advanced: true,      label:'PrecificaÃ§Ã£o',           icon:'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z' },
+  { id:'pricing', advanced: true,      label:'Precificação',           icon:'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z' },
   { id:'benchmark', advanced: true,    label:'Benchmark Conklin',      icon:'M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z' },
-  { id:'data', advanced: true,         label:'Exportar / IntegraÃ§Ãµes', icon:'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z' },
+  { id:'data', advanced: true,         label:'Exportar / Integrações', icon:'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z' },
 ];
 
-const THEME_ICONS = { dark:'ð', light:'âï¸', system:'ð»' };
+const THEME_ICONS = { dark:'ð', light:'—ï¸', system:'ð»' };
 
-// Tooltip simples com ? para termos tÃ©cnicos
+// Tooltip simples com ? para termos técnicos
 export function Tip({ text, children }) {
   const [show, setShow] = React.useState(false);
   return (
@@ -111,12 +111,12 @@ export function Tip({ text, children }) {
   );
 }
 
-// Tint sutil por seÃ§Ã£o â mantÃ©m identidade visual do app
+// Tint sutil por seção — mantém identidade visual do app
 const SECTION_TINTS = {
-  'GestÃ£o da Aeronave':        { tint:'rgba(77,157,224,0.03)',  accent:'var(--blue)' },
+  'Gestão da Aeronave':        { tint:'rgba(77,157,224,0.03)',  accent:'var(--blue)' },
   'Planejamento & Despacho':   { tint:'rgba(232,168,74,0.03)',  accent:'var(--amber)' },
   'Acompanhamento de Voo':     { tint:'rgba(61,191,138,0.03)',  accent:'var(--green)' },
-  'ConfiguraÃ§Ãµes & Cadastros': { tint:'rgba(155,127,232,0.03)', accent:'var(--purple)' },
+  'Configurações & Cadastros': { tint:'rgba(155,127,232,0.03)', accent:'var(--purple)' },
 };
 
 function getSectionForPage(pid) {
@@ -201,11 +201,11 @@ export default function App() {
 
   useEffect(() => { if (user) reload(); }, [user, reload]);
 
-  // ââ Realtime sync âââââââââââââââââââââââââââââââââââââââââ
+  // —— Realtime sync —————————————————————————————————————————
   useEffect(() => {
     if (!user) return;
 
-    // Debounce â evita mÃºltiplos reloads quando vÃ¡rias linhas mudam ao mesmo tempo
+    // Debounce — evita mÃºltiplos reloads quando várias linhas mudam ao mesmo tempo
     let timer = null;
     function debouncedReload() {
       clearTimeout(timer);
@@ -245,7 +245,7 @@ export default function App() {
   if (user === undefined) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg0)' }}>
       <div style={{ textAlign:'center', color:'var(--text3)' }}>
-        <div style={{ fontSize:32, marginBottom:12 }}>â</div>
+        <div style={{ fontSize:32, marginBottom:12 }}>—</div>
         <div style={{ fontSize:13 }}>Carregando...</div>
       </div>
     </div>
@@ -282,7 +282,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Nav â accordion by section */}
+        {/* Nav — accordion by section */}
         <nav style={{ flex:1, padding: collapsed ? '8px 4px' : '8px', overflowY:'auto' }}>
           {(() => {
             const elements = [];
@@ -310,7 +310,7 @@ export default function App() {
                   );
                 });
               } else {
-                // Section header button â capture section name to avoid closure bug
+                // Section header button — capture section name to avoid closure bug
                 const sectionName = currentSection;
                 elements.push(
                   <button key={`sec-${sectionName}`}
@@ -348,13 +348,13 @@ export default function App() {
                   });
 
                   if (advItems.length > 0) {
-                    // "AvanÃ§ado" toggle
+                    // "Avançado" toggle
                     elements.push(
                       <button key={advKey}
                         onClick={() => setOpenSections(prev => { const n = new Set(prev); n.has(advKey) ? n.delete(advKey) : n.add(advKey); return n; })}
                         style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'4px 10px 4px 14px', borderRadius:6, border:'none', cursor:'pointer', marginBottom:1, marginTop:2, background:'transparent', color:'var(--text3)' }}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ transition:'transform .2s', transform: advOpen ? 'rotate(90deg)' : 'rotate(0)' }}><path d="M10 17l5-5-5-5v10z"/></svg>
-                        <span style={{ fontSize:9.5, fontWeight:500, letterSpacing:'.05em' }}>AvanÃ§ado</span>
+                        <span style={{ fontSize:9.5, fontWeight:500, letterSpacing:'.05em' }}>Avançado</span>
                       </button>
                     );
                     if (advOpen) {
@@ -434,7 +434,7 @@ export default function App() {
         {/* Collapse toggle */}
         <button onClick={toggleSidebar} title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           style={{ position:'absolute', top:'50%', right:-12, transform:'translateY(-50%)', width:24, height:24, borderRadius:'50%', border:`1px solid var(--border)`, background:'var(--bg1)', color:'var(--text3)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, padding:0, zIndex:10, transition:'all .2s' }}>
-          {collapsed ? 'âº' : 'â¹'}
+          {collapsed ? '—º' : '—¹'}
         </button>
       </aside>
 
@@ -446,7 +446,7 @@ export default function App() {
           <NotificationBell maintenance={maintenance} aircraft={aircraft} crew={crew} documents={crewDocs} setPage={page => { setPage(page); }} />
         </div>
         <MigrationBanner onDone={reload} />
-        {/* Global aircraft filter â visible when there are 2+ aircraft */}
+        {/* Global aircraft filter — visible when there are 2+ aircraft */}
         {aircraft.length > 1 && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 24px 0', flexWrap:'wrap' }}>
             <span style={{ fontSize:11, color:'var(--text3)', fontWeight:500, textTransform:'uppercase', letterSpacing:'.06em' }}>Aeronave:</span>
@@ -525,8 +525,8 @@ export default function App() {
           {page==='range'         && <RangeCalculator aircraft={filteredAircraft} />}
           {page==='integrations'  && <Integrations reload={reload} />}
           {page==='fuelprices'    && <FuelPrices aircraft={filteredAircraft} />}
-          {page==='performance'   && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Performance</div><div style={{fontSize:13}}>Em construÃ§Ã£o â tabelas POH por aeronave.<br/>Importe um POH para comeÃ§ar.</div><button className="primary" style={{marginTop:20}} onClick={()=>setShowPOH(true)}>Importar POH</button></div>}
-          {page==='benchmark'     && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Benchmark Conklin & de Decker</div><div style={{fontSize:13}}>Em construÃ§Ã£o â custo real vs. mÃ©dia de mercado por tipo de aeronave.</div></div>}
+          {page==='performance'   && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Performance</div><div style={{fontSize:13}}>Em construção — tabelas POH por aeronave.<br/>Importe um POH para começar.</div><button className="primary" style={{marginTop:20}} onClick={()=>setShowPOH(true)}>Importar POH</button></div>}
+          {page==='benchmark'     && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Benchmark Conklin & de Decker</div><div style={{fontSize:13}}>Em construção — custo real vs. média de mercado por tipo de aeronave.</div></div>}
           </>)}
           </ErrorBoundary>
         </React.Suspense>
