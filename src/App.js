@@ -162,6 +162,11 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('am_theme', theme);
   }, [theme]);
+  useEffect(() => {
+    const onResize = () => { const m = window.innerWidth < 768; setIsMobile(m); if (m) setCollapsed(true); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   function cycleTheme() {
     setTheme(t => t === 'dark' ? 'light' : t === 'light' ? 'system' : 'dark');
