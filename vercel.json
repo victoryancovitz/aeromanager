@@ -5,7 +5,21 @@
       "memory": 1024
     }
   },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+  "routes": [
+    {
+      "src": "/beta",
+      "dest": "/beta.html"
+    },
+    {
+      "src": "/beta.html",
+      "dest": "/beta.html"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
