@@ -91,7 +91,8 @@ const THEME_ICONS = { dark:'🌙', light:'☀️', system:'💻' };
 
 // Tooltip simples com ? para termos técnicos
 export function Tip({ text, children }) {
-  const [show, setShow] = React.useState(false);
+const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    const [show, setShow] = React.useState(false);
   return (
     <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:3 }}>
       {children}
