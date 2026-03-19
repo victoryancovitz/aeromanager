@@ -541,7 +541,7 @@ export default function App() {
           {page==='integrations'  && <Integrations reload={reload} />}
           {page==='fuelprices'    && <FuelPrices aircraft={filteredAircraft} />}
           {page==='performance'   && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Performance</div><div style={{fontSize:13}}>Em construção — tabelas POH por aeronave.<br/>Importe um POH para começar.</div><button className="primary" style={{marginTop:20}} onClick={()=>setShowPOH(true)}>Importar POH</button></div>}
-          {page==='benchmark'     && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>ð</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Benchmark Conklin & de Decker</div><div style={{fontSize:13}}>Em construção — custo real vs. média de mercado por tipo de aeronave.</div></div>}
+          {page==='benchmark'     && <div style={{padding:'40px 32px',color:'var(--text3)',textAlign:'center'}}><div style={{fontSize:40,marginBottom:16}}>📊</div><div style={{fontFamily:'var(--font-serif)',fontSize:20,marginBottom:8}}>Benchmark Conklin & de Decker</div><div style={{fontSize:13}}>Em construção — custo real vs. média de mercado por tipo de aeronave.</div></div>}
           </>)}
           </ErrorBoundary>
         </React.Suspense>
