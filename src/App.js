@@ -91,7 +91,6 @@ const THEME_ICONS = { dark:'🌙', light:'☀️', system:'💻' };
 
 // Tooltip simples com ? para termos técnicos
 export function Tip({ text, children }) {
-const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     const [show, setShow] = React.useState(false);
   return (
     <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:3 }}>
@@ -150,7 +149,8 @@ export default function App() {
   const [showGD, setShowGD]     = useState(false);
   const [preselFlight, setPreselFlight] = useState(null);
   const [dataLoading, setDataLoading]   = useState(false);
-  const [collapsed, setCollapsed]       = useState(() => localStorage.getItem('am_sidebar') === '1');
+const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    const [collapsed, setCollapsed]       = useState(() => localStorage.getItem('am_sidebar') === '1');
   const [openSections, setOpenSections]  = useState(() => {
     const saved = localStorage.getItem('am_page') || 'dashboard';
     const activeSection = getSectionForPage(saved);
