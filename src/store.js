@@ -75,6 +75,12 @@ export async function getAircraft() {
     }
   }
 
+
+  // Popular cache de aeroportos para o GPS tracker (em background)
+  supabase.from('airports_db').select('icao,lat,lng,name,iata,city').eq('country','BR').not('lat','is',null)
+    .then(({data})=>{
+      if(data&&data.length>0) seedAirportCache(data.map(a=>({icao:a.icao,lat:parseFloat(a.lat),lon:parseFloat(a.lng),name:a.name||a.icao})));
+    }).catch(()=>{});
   return [...(owned || []), ...shared].map(fromDB_aircraft);
 }
 export async function saveAircraft(ac) {
