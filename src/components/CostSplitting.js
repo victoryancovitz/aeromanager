@@ -265,9 +265,7 @@ export default function CostSplitting({ aircraft }) {
     setEditCost(null);
   }
 
-  const totalCosts   = costs.reduce((s,c) => s + parseFloat(c.amount_brl||0), 0);
-  const totalHours   = flights.reduce((s,f) => s + (f.flight_time_minutes||0), 0);
-    function handleEuPaguei(cost) {
+  function handleEuPaguei(cost) {
     if (!window.confirm('Confirmar: voce pagou este custo? Os socios serao debitados no Acerto de Contas.')) return;
     (async () => {
       const user = await getUser();
@@ -311,6 +309,8 @@ export default function CostSplitting({ aircraft }) {
     })();
   }
 
+  const totalCosts   = costs.reduce((s,c) => s + parseFloat(c.amount_brl||0), 0);
+  const totalHours   = flights.reduce((s,f) => s + (f.flight_time_minutes||0), 0);
   const splitEntries = Object.values(splits);
 
   // ── No co-owners ─────────────────────────────────────────
