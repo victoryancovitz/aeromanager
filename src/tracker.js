@@ -181,6 +181,7 @@ class FlightTracker {
     // Update current values
     state.currentLat    = lat;
     state.currentLon    = lon;
+  state.prevAltFt = state.currentAltFt || altFt;
     state.currentAltFt  = Math.round(altFt);
     state.currentSpeedKt= Math.round(speedKt);
     state.maxAltitudeFt = Math.max(state.maxAltitudeFt || 0, altFt);
@@ -218,7 +219,7 @@ class FlightTracker {
 
     else if (state.status === 'airborne') {
       // Detect landing
-      if (speedKt < LANDING_SPEED_KT && altFt < 1000) {
+      if (speedKt < LANDING_SPEED_KT && Math.abs(altFt - (state.prevAltFt || altFt)) < 100) {
         if (!this.stateConfirmStart) {
           this.stateConfirmStart = Date.now();
           this.pendingState      = 'landed';
