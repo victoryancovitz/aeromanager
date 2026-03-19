@@ -40,14 +40,42 @@ export function onAuthChange(callback) {
 
 // ── Aircraft ──────────────────────────────────────────────────
 export async function getAircraft() {
-  const { data, error } = await supabase
+  // 1. Aeronaves próprias
+  const { data: owned, error } = await supabase
     .from('aircraft')
     .select('*')
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data || []).map(fromDB_aircraft);
-}
 
+  // 2. Aeronaves compartilhadas via co-propriedade
+  const user = await getUser();
+  let shared = [];
+  if (user) {
+    const { data: coOwned } = await supabase
+      .from('aircraft_co_owners')
+      .select('aircraft_id, share_pct, role')
+      .eq('user_id', user.id);
+    if (coOwned && coOwned.length > 0) {
+      const ownedIds = new Set((owned || []).map(a => a.id));
+      const sharedIds = coOwned.map(c => c.aircraft_id).filter(id => !ownedIds.has(id));
+      if (sharedIds.length > 0) {
+        const { data: sharedAc } = await supabase
+          .from('aircraft')
+          .select('*')
+          .in('id', sharedIds);
+        // Marcar como compartilhada para exibição
+        shared = (sharedAc || []).map(a => ({
+          ...a,
+          _shared: true,
+          _shareRole: coOwned.find(c => c.aircraft_id === a.id)?.role || 'co_owner',
+          _sharePct: coOwned.find(c => c.aircraft_id === a.id)?.share_pct || 0,
+        }));
+      }
+    }
+  }
+
+  return [...(owned || []), ...shared].map(fromDB_aircraft);
+}
 export async function saveAircraft(ac) {
   const user = await getUser();
   if (!user) throw new Error('Não autenticado');
