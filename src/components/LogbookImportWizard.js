@@ -1,6 +1,6 @@
 // LogbookImportWizard.js — v5.40
 import React, { useState, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabase';
 
 const toBase64 = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = () => rej(new Error('Leitura falhou')); r.readAsDataURL(file); });
 
