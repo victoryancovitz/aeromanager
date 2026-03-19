@@ -513,7 +513,7 @@ export default function CostSplitting({ aircraft }) {
                 const info = SPLIT_LABELS[rule] || {};
                 const isEditing = editCost === cost.id;
                 return (
-                  <div key={cost.id} style={{ padding:'10px 14px', borderRadius:10, background:'var(--bg2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10 }}>
+                  <div key={cost.id} style={{ padding:'10px 14px', borderRadius:10, background:'var(--bg2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                     <span style={{ fontSize:16, flexShrink:0 }}>{info.icon}</span>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:12, fontWeight:500 }}>{cost.description}</div>
@@ -523,7 +523,7 @@ export default function CostSplitting({ aircraft }) {
                       {fmtBRL(parseFloat(cost.amount_brl))}
                     </div>
                     {isEditing ? (
-                      <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                      <div style={{ display:'flex', gap:4, flexShrink:0, flexWrap:'wrap', width:'100%', marginTop:4 }}>
                         {Object.entries(SPLIT_LABELS).map(([key, val]) => (
                           <button key={key} onClick={() => handleRuleChange(cost.id, key)} disabled={saving}
                             style={{ padding:'4px 8px', fontSize:10, borderRadius:6, border:`1px solid ${rule===key?val.color:'var(--border)'}`, background:rule===key?'var(--bg3)':'transparent', color:val.color, cursor:'pointer', whiteSpace:'nowrap' }}>
