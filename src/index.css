@@ -314,6 +314,72 @@ input[type=checkbox] {
 .sidebar-collapsed .bottom-email { display:none; }
 
 /* ── Logbook print styles ─────────────────────────────────── */
+
+
+/* ── Mobile Responsive ── */
+@media (max-width: 767px) {
+  /* Layout principal */
+  main { min-width: 0 !important; overflow-x: hidden; }
+  
+  /* Grids adaptáveis */
+  .g2, .g3, .g4 { grid-template-columns: 1fr !important; gap: 10px !important; }
+  
+  /* Tabelas viram scroll horizontal */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+  
+  /* Padding menor nas páginas */
+  [style*="padding:40px"] { padding: 16px !important; }
+  [style*="padding: 40px"] { padding: 16px !important; }
+  
+  /* Cards internos */
+  .card { border-radius: var(--r-lg) !important; }
+  
+  /* Botões maiores para toque */
+  button { min-height: 40px; }
+  button.primary { min-height: 44px; font-size: 14px; }
+  
+  /* Inputs maiores */
+  input, select, textarea { font-size: 16px !important; /* evita zoom no iOS */ padding: 11px 12px; }
+  
+  /* KPI cards empilhados */
+  .kpi-number { font-size: 20px; }
+  
+  /* Gauge menor */
+  .gauge-value { font-size: 16px; }
+  
+  /* Filtro de aeronave scroll horizontal */
+  [style*="flexWrap:wrap"] { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  
+  /* Ocultar colunas menos importantes em tabelas */
+  .hide-mobile { display: none !important; }
+  
+  /* Formulários full width */
+  [style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  
+  /* Sidebar overlay fix */
+  aside { transition: transform 0.25s ease; }
+  
+  /* Alertas e banners */
+  .alert { font-size: 12px; }
+  .bulk-bar { flex-wrap: wrap; gap: 8px; }
+
+  /* Bottom nav-like para o botão principal */
+  .bottom-section { padding-bottom: 8px; }
+  
+  /* Notification bell maior */
+  [title="Notificações"] { padding: 10px; }
+}
+
+@media (max-width: 480px) {
+  /* Telas muito pequenas */
+  .g2 { grid-template-columns: 1fr !important; }
+  .page-title { font-size: 18px; }
+  th { font-size: 9px; padding: 6px 8px; }
+  td { font-size: 12px; padding: 7px 8px; }
+  .kpi-number { font-size: 18px; }
+  .tag { font-size: 9.5px; padding: 2px 8px; }
+}
+
 @media print {
   body * { visibility: hidden; }
   .print-area, .print-area * { visibility: visible; }
