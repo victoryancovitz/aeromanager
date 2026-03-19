@@ -87,7 +87,7 @@ const NAV = [
   { id:'data', advanced: true,         label:'Exportar / Integrações', icon:'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z' },
 ];
 
-const THEME_ICONS = { dark:'ð', light:'—ï¸', system:'ð»' };
+const THEME_ICONS = { dark:'🌙', light:'☀️', system:'💻' };
 
 // Tooltip simples com ? para termos técnicos
 export function Tip({ text, children }) {
@@ -260,6 +260,7 @@ export default function App() {
     if (data) setPreselFlight(data);
     setSelectedAc(null);
     setPage(p);
+    if (isMobile) setCollapsed(true);
     const sec = getSectionForPage(p);
     if (sec) setOpenSections(prev => { const next = new Set(prev); next.add(sec); return next; });
   }
@@ -267,7 +268,7 @@ export default function App() {
   return (
     <div style={{ display:'flex', minHeight:'100vh' }}>
       {/* Sidebar */}
-      <aside style={{ width:sidebarW, background:'var(--bg1)', borderRight:`1px solid var(--border)`, display:'flex', flexDirection:'column', flexShrink:0, position:'sticky', top:0, height:'100vh', overflowY:'auto', overflowX:'hidden', transition:'width .2s ease' }}>
+      <aside style={{ width:sidebarW, background:'var(--bg1)', borderRight:`1px solid var(--border)`, display:'flex', flexDirection:'column', flexShrink:0, position:isMobile ? 'fixed' : 'sticky', top:0, height:'100vh', zIndex:50, overflowY:'auto', overflowX:'hidden', transition:'width .2s ease' }}>
 
         {/* Logo */}
         <div style={{ padding: collapsed ? '14px 10px' : '14px 14px', borderBottom:`1px solid var(--border)`, display:'flex', alignItems:'center', gap:10, justifyContent: collapsed ? 'center' : 'flex-start' }}>
@@ -277,7 +278,7 @@ export default function App() {
           {!collapsed && (
             <div className="logo-text">
               <div style={{ fontFamily:'var(--font-serif)', fontWeight:400, fontSize:17, color:'var(--text1)', letterSpacing:'.02em' }}>AeroManager</div>
-              <div style={{ fontSize:9.5, color:'var(--text3)', fontWeight:500, letterSpacing:'.1em', textTransform:'uppercase', marginTop:1 }}>v5.42</div>
+              <div style={{ fontSize:9.5, color:'var(--text3)', fontWeight:500, letterSpacing:'.1em', textTransform:'uppercase', marginTop:1 }}>v5.43</div>
             </div>
           )}
         </div>
@@ -437,12 +438,20 @@ export default function App() {
           {collapsed ? '—º' : '—¹'}
         </button>
       </aside>
+      {isMobile && !collapsed && (
+        <div onClick={() => setCollapsed(true)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:48}} />
+      )}
 
       {/* Main */}
       <main style={{ flex:1, minWidth:0, overflowY:'auto', transition:'background .35s ease',
         background: (() => { const s = getSectionForPage(page); const t = SECTION_TINTS[s]; return t ? `color-mix(in srgb, var(--bg0) 97%, ${t.tint.includes('77,157') ? '#4d9de0' : t.tint.includes('232,168') ? '#e8a84a' : t.tint.includes('61,191') ? '#3dbf8a' : '#9b7fe8'} 3%)` : 'var(--bg0)'; })() }}>
         {/* Topbar with notifications */}
-        <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', padding:'8px 16px 0', gap:4 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 16px 0', gap:4 }}>
+          {isMobile && collapsed && (
+            <button onClick={() => setCollapsed(false)} title="Menu" style={{background:'none',border:'none',color:'var(--text2)',padding:'6px 10px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center'}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+            </button>
+          )}
           <NotificationBell maintenance={maintenance} aircraft={aircraft} crew={crew} documents={crewDocs} setPage={page => { setPage(page); }} />
         </div>
         <MigrationBanner onDone={reload} />
