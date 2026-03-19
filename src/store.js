@@ -696,6 +696,8 @@ function toDB_flight(f, userId) {
     flight_conditions:    f.flightConditions || 'vfr',
     purpose:              f.purpose || 'leisure',
     cycles:               parseInt(f.cycles) || 1,
+    hobbs_start: f.hobbsStart || null,
+    hobbs_end:   f.hobbsEnd   || null,
     phase_climb_min:      parseInt(f.phaseClimbMin) || 0,
     phase_cruise_min:     parseInt(f.phaseCruiseMin) || 0,
     phase_descent_min:    parseInt(f.phaseDescentMin) || 0,
