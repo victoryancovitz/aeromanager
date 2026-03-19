@@ -91,7 +91,7 @@ const THEME_ICONS = { dark:'🌙', light:'☀️', system:'💻' };
 
 // Tooltip simples com ? para termos técnicos
 export function Tip({ text, children }) {
-    const [show, setShow] = React.useState(false);
+  const [show, setShow] = React.useState(false);
   return (
     <span style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:3 }}>
       {children}
@@ -149,8 +149,7 @@ export default function App() {
   const [showGD, setShowGD]     = useState(false);
   const [preselFlight, setPreselFlight] = useState(null);
   const [dataLoading, setDataLoading]   = useState(false);
-const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-    const [collapsed, setCollapsed]       = useState(() => localStorage.getItem('am_sidebar') === '1');
+  const [collapsed, setCollapsed]       = useState(() => localStorage.getItem('am_sidebar') === '1');
   const [openSections, setOpenSections]  = useState(() => {
     const saved = localStorage.getItem('am_page') || 'dashboard';
     const activeSection = getSectionForPage(saved);
@@ -163,11 +162,6 @@ const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('am_theme', theme);
   }, [theme]);
-  useEffect(() => {
-    const onResize = () => { const m = window.innerWidth < 768; setIsMobile(m); if (m) setCollapsed(true); };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   function cycleTheme() {
     setTheme(t => t === 'dark' ? 'light' : t === 'light' ? 'system' : 'dark');
@@ -274,7 +268,7 @@ const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   return (
     <div style={{ display:'flex', minHeight:'100vh' }}>
       {/* Sidebar */}
-      <aside style={{ width:sidebarW, background:'var(--bg1)', borderRight:`1px solid var(--border)`, display:'flex', flexDirection:'column', flexShrink:0, position:isMobile ? 'fixed' : 'sticky', top:0, height:'100vh', zIndex:50, overflowY:'auto', overflowX:'hidden', transition:'width .2s ease' }}>
+      <aside style={{ width:sidebarW, background:'var(--bg1)', borderRight:`1px solid var(--border)`, display:'flex', flexDirection:'column', flexShrink:0, position:isMobile ? 'fixed' : 'sticky', top:0, height:'100vh', overflowY:'auto', overflowX:'hidden', transition:isMobile ? 'transform .25s ease' : 'width .2s ease', transform:isMobile && collapsed ? 'translateX(-100%)' : 'translateX(0)' }}>
 
         {/* Logo */}
         <div style={{ padding: collapsed ? '14px 10px' : '14px 14px', borderBottom:`1px solid var(--border)`, display:'flex', alignItems:'center', gap:10, justifyContent: collapsed ? 'center' : 'flex-start' }}>
@@ -325,6 +319,11 @@ const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
                     style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', padding:'8px 10px 7px', borderRadius:8, border:'none', cursor:'pointer', marginBottom:2, marginTop:4, transition:'all .15s',
                       background: activeSec ? (tint?.tint?.replace('0.03','0.07') || 'transparent') : 'transparent',
                       color: activeSec ? tint?.accent?.replace('var(--','').replace(')','').split('-')[0] === 'blue' ? 'var(--blue)' : tint?.accent?.includes('amber') ? 'var(--amber)' : tint?.accent?.includes('green') ? 'var(--green)' : 'var(--purple)' : 'var(--text3)' }}>
+          {isMobile && collapsed && (
+            <button onClick={() => setCollapsed(false)} style={{background:'none',border:'none',color:'var(--text2)',padding:'6px 10px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center'}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+            </button>
+          )}
                     <span style={{ fontSize:9, fontWeight:600, textTransform:'uppercase', letterSpacing:'.1em' }}>{currentSection}</span>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"
                       style={{ flexShrink:0, transition:'transform .2s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
@@ -445,7 +444,7 @@ const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
         </button>
       </aside>
       {isMobile && !collapsed && (
-        <div onClick={() => setCollapsed(true)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:48}} />
+        <div onClick={() => setCollapsed(true)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:48,cursor:'pointer'}} />
       )}
 
       {/* Main */}
@@ -453,11 +452,6 @@ const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
         background: (() => { const s = getSectionForPage(page); const t = SECTION_TINTS[s]; return t ? `color-mix(in srgb, var(--bg0) 97%, ${t.tint.includes('77,157') ? '#4d9de0' : t.tint.includes('232,168') ? '#e8a84a' : t.tint.includes('61,191') ? '#3dbf8a' : '#9b7fe8'} 3%)` : 'var(--bg0)'; })() }}>
         {/* Topbar with notifications */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 16px 0', gap:4 }}>
-          {isMobile && collapsed && (
-            <button onClick={() => setCollapsed(false)} title="Menu" style={{background:'none',border:'none',color:'var(--text2)',padding:'6px 10px',borderRadius:8,cursor:'pointer',display:'flex',alignItems:'center'}}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
-            </button>
-          )}
           <NotificationBell maintenance={maintenance} aircraft={aircraft} crew={crew} documents={crewDocs} setPage={page => { setPage(page); }} />
         </div>
         <MigrationBanner onDone={reload} />
