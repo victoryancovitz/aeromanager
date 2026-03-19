@@ -149,7 +149,13 @@ export default function App() {
   const [showGD, setShowGD]     = useState(false);
   const [preselFlight, setPreselFlight] = useState(null);
   const [dataLoading, setDataLoading]   = useState(false);
-  const [collapsed, setCollapsed]       = useState(() => localStorage.getItem('am_sidebar') === '1');
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768 ? true : localStorage.getItem('am_sidebar') === '1');
+  useEffect(() => {
+    const onResize = () => { const m=window.innerWidth<768; setIsMobile(m); if(m) setCollapsed(true); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [openSections, setOpenSections]  = useState(() => {
     const saved = localStorage.getItem('am_page') || 'dashboard';
     const activeSection = getSectionForPage(saved);
