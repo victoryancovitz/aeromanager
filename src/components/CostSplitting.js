@@ -267,8 +267,7 @@ export default function CostSplitting({ aircraft }) {
 
   const totalCosts   = costs.reduce((s,c) => s + parseFloat(c.amount_brl||0), 0);
   const totalHours   = flights.reduce((s,f) => s + (f.flight_time_minutes||0), 0);
-  
-  function handleEuPaguei(cost) {
+    function handleEuPaguei(cost) {
     if (!window.confirm('Confirmar: voce pagou este custo? Os socios serao debitados no Acerto de Contas.')) return;
     (async () => {
       const user = await getUser();
@@ -305,13 +304,10 @@ export default function CostSplitting({ aircraft }) {
           description: o.display_name + ' deve R$' + (Math.round(share * 100) / 100).toFixed(2) + ' ref: ' + cost.description
         });
       }
-      if (!rows.length) {
-        alert('Nenhum debito gerado.');
-        return;
-      }
+      if (!rows.length) { alert('Nenhum debito gerado.'); return; }
       const { error } = await supabase.from('credit_ledger').insert(rows);
       if (error) alert('Erro: ' + error.message);
-      else alert('✅ ' + rows.length + ' debito(s) lancado(s) no Acerto de Contas!');
+      else alert('Lancado! ' + rows.length + ' debito(s) no Acerto de Contas.');
     })();
   }
 
@@ -585,7 +581,7 @@ export default function CostSplitting({ aircraft }) {
                         style={{ padding:'4px 10px', fontSize:10, borderRadius:6, border:`1px solid ${info.color}33`, background:'transparent', color:info.color, cursor:'pointer', flexShrink:0, fontWeight:500 }}>
                         {info.label}
                       </button>
-                      <button onClick={()=>handleEuPaguei(cost)} style={{padding:'4px 8px',fontSize:10,borderRadius:6,border:'1px solid #22c55e44',background:'transparent',color:'#16a34a',cursor:'pointer',flexShrink:0,fontWeight:500}}>💸 Eu paguei</button>
+                      <button onClick={()=>handleEuPaguei(cost)} style={{padding:'4px 8px',fontSize:10,borderRadius:6,border:'1px solid #22c55e44',background:'transparent',color:'#16a34a',cursor:'pointer',flexShrink:0,fontWeight:500}}>Eu paguei</button>
                     )}
                   </div>
                 );
