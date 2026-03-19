@@ -275,6 +275,8 @@ export default function CostSplitting({ aircraft }) {
   const [newOwnerName, setNewOwnerName] = React.useState('');
   const [newOwnerEmail, setNewOwnerEmail] = React.useState('');
   const [newOwnerPct, setNewOwnerPct] = React.useState('');
+  const [newOwnerRole, setNewOwnerRole] = React.useState('owner');
+  const [newOwnerDate, setNewOwnerDate] = React.useState(new Date().toISOString().slice(0,10));
   const [addingOwner, setAddingOwner] = React.useState(false);
 
   async function handleAddOwner() {
@@ -287,8 +289,8 @@ export default function CostSplitting({ aircraft }) {
         display_name: newOwnerName,
         email: newOwnerEmail || null,
         share_pct: parseFloat(newOwnerPct),
-        role: 'owner',
-        joined_at: new Date().toISOString().slice(0,10),
+        role: newOwnerRole || 'owner',
+        joined_at: newOwnerDate || new Date().toISOString().slice(0,10),
       });
       if (error) throw error;
       setNewOwnerName(''); setNewOwnerEmail(''); setNewOwnerPct('');
@@ -329,6 +331,21 @@ export default function CostSplitting({ aircraft }) {
               <label style={{ display:'block', fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:600, textTransform:'uppercase' }}>Cota de propriedade (%) *</label>
               <input value={newOwnerPct} onChange={e=>setNewOwnerPct(e.target.value)} placeholder="Ex: 50" type="number" min="1" max="100" style={{ width:'100%', padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text1)', fontSize:13 }} />
             </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <div>
+                <label style={{ display:'block', fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:600, textTransform:'uppercase' }}>Papel</label>
+                <select value={newOwnerRole} onChange={e=>setNewOwnerRole(e.target.value)} style={{ width:'100%', padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text1)', fontSize:13 }}>
+                  <option value="owner">Proprietário</option>
+                  <option value="co_owner">Co-proprietário</option>
+                  <option value="manager">Gestor</option>
+                  <option value="authorized_pilot">Piloto autorizado</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:600, textTransform:'uppercase' }}>Sócio desde</label>
+                <input value={newOwnerDate} onChange={e=>setNewOwnerDate(e.target.value)} type="date" style={{ width:'100%', padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text1)', fontSize:13 }} />
+              </div>
+            </div>
             <div style={{ display:'flex', gap:8, marginTop:4 }}>
               <button onClick={handleAddOwner} disabled={addingOwner || !newOwnerName || !newOwnerPct} style={{ flex:1, padding:'10px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', opacity:(!newOwnerName||!newOwnerPct)?0.5:1 }}>
                 {addingOwner ? 'Salvando...' : 'Salvar sócio'}
@@ -349,8 +366,10 @@ export default function CostSplitting({ aircraft }) {
         <div style={{ fontFamily:'var(--font-serif)', fontSize:20, marginBottom:4 }}>
           Rateio de custos — {aircraft?.registration}
         </div>
-        <div style={{ fontSize:12, color:'var(--text3)' }}>
-          {owners.length} sócios · Custo fixo dividido por cota · Variável por horas voadas
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4, flexWrap:'wrap', gap:8 }}>
+          <div style={{ fontSize:12, color:'var(--text3)' }}>
+          {owners.length} sócios · Custo fixo por cota · Variável por horas voadas
+        </div>
         </div>
       </div>
 
@@ -412,7 +431,7 @@ export default function CostSplitting({ aircraft }) {
                     <div style={{ flex:1 }}>
                       <div style={{ fontWeight:600, fontSize:14 }}>{owner.display_name}</div>
                       <div style={{ fontSize:11, color:'var(--text3)', marginTop:2, display:'flex', gap:10 }}>
-                        <span>{owner.share_pct}% de propriedade</span>
+                        <span>{owner.share_pct}% · {owner.role==='owner'?'Proprietário':owner.role==='manager'?'Gestor':owner.role==='authorized_pilot'?'Piloto Autorizado':'Co-proprietário'}</span>
                         <span>·</span>
                         <span>{fmtH(hours)} voadas ({ownerPct}% do total)</span>
                       </div>
