@@ -265,6 +265,66 @@ export default function CostSplitting({ aircraft }) {
     setEditCost(null);
   }
 
+  async function handleMarkPaid(cost) {
+    // Gera debitos no credit_ledger para todos os socios que devem ao pagador
+    const user = await getUser();
+    if (!user) return;
+    
+    const payerName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Proprietário';
+    const totalAmount = parseFloat(cost.amount_brl) || 0;
+    const rule = cost.split_rule || 'equal';
+    
+    // Calcular quanto cada socio deve ao pagador
+    const debits = [];
+    owners.forEach(owner => {
+      // Nao gerar debito para o proprio pagador
+      if (owner.user_id === user.id) return;
+      
+      let ownerShare = 0;
+      if (rule === 'equal') {
+        ownerShare = (owner.share_pct / 100) * totalAmount;
+      } else if (rule === 'proportional_hours') {
+        // Usar horas do periodo como base
+        const ownerMins = splits[owner.id]?.hours || 0;
+        const totalMins = flights.reduce((s,f)=>s+(f.flight_time_minutes||0),0);
+        ownerShare = totalMins > 0 ? (ownerMins / totalMins) * totalAmount : (owner.share_pct / 100) * totalAmount;
+      } else if (rule === 'direct') {
+        // Custo direto nao gera debito automatico
+        return;
+      }
+      
+      if (ownerShare > 0.01) {
+        debits.push({
+          aircraft_id: aircraft.id,
+          user_id: user.id,
+          creditor_name: payerName,
+          creditor_user_id: user.id,
+          debtor_name: owner.display_name,
+          debtor_user_id: owner.user_id || null,
+          amount_brl: Math.round(ownerShare * 100) / 100,
+          hours_credit: 0,
+          origin_type: 'cost_overpayment',
+          origin_cost_id: cost.id,
+          status: 'pending',
+          description: owner.display_name + ' deve ' + Math.round(ownerShare).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) + ' (' + owner.share_pct + '% de ' + cost.description + ')'
+        });
+      }
+    });
+    
+    if (debits.length === 0) {
+      alert('Nenhum débito gerado — você é o único sócio ou o custo é direto.');
+      return;
+    }
+    
+    const { error } = await supabase.from('credit_ledger').insert(debits);
+    if (error) { alert('Erro: ' + error.message); return; }
+    
+    alert('✅ ' + debits.length + ' débito(s) registrado(s) no Acerto de Contas!
+' +
+      debits.map(d => d.debtor_name + ': ' + d.amount_brl.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})).join('
+'));
+  }
+
   const totalCosts   = costs.reduce((s,c) => s + parseFloat(c.amount_brl||0), 0);
   const totalHours   = flights.reduce((s,f) => s + (f.flight_time_minutes||0), 0);
   const splitEntries = Object.values(splits);
@@ -536,6 +596,11 @@ export default function CostSplitting({ aircraft }) {
                       <button onClick={() => setEditCost(cost.id)}
                         style={{ padding:'4px 10px', fontSize:10, borderRadius:6, border:`1px solid ${info.color}33`, background:'transparent', color:info.color, cursor:'pointer', flexShrink:0, fontWeight:500 }}>
                         {info.label}
+                      </button>
+                      <button onClick={() => handleMarkPaid(cost)}
+                        title="Marcar que eu paguei este custo — gera débitos para os outros sócios no Acerto de Contas"
+                        style={{ padding:'4px 8px', fontSize:10, borderRadius:6, border:'1px solid var(--green)33', background:'transparent', color:'var(--green)', cursor:'pointer', flexShrink:0, fontWeight:500 }}>
+                        💸 Eu paguei
                       </button>
                     )}
                   </div>
