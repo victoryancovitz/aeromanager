@@ -89,7 +89,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
   async function confirmAndSave() {
     setSaving(true);
     try {
-      const saved = await tracker.confirmFlight(confirmForm);
+      const saved = await tracker.confirmFlight({ ...confirmForm, hobbsStart: hobbs.start ? parseFloat(hobbs.start) : null, hobbsEnd: hobbs.end ? parseFloat(hobbs.end) : null });
       // Auto-create fuel cost if filled
       if (fuel.liters && fuel.pricePerLiter) {
         await saveCost({
@@ -230,6 +230,29 @@ export default function FlightTrackerPage({ reload, setPage }) {
           <div style={{ marginTop: 8, padding: '8px 12px', background: '#0d3320', borderRadius: 8, fontSize: 12, color: '#3dd68c' }}>
             Custo combustível: <strong>R$ {(parseFloat(fuel.liters) * parseFloat(fuel.pricePerLiter)).toFixed(2).replace('.',',')}</strong> — será lançado automaticamente
           </div>
+
+  <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+    <div className="section-title">Horímetro (Hobbs)</div>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+      <div>
+        <label>Inicio</label>
+        <input type="number" step="0.1" value={hobbs.start} onChange={e=>setHobbs(h=>({...h,start:e.target.value}))} placeholder="847.5" />
+      </div>
+      <div>
+        <label>Final</label>
+        <input type="number" step="0.1" value={hobbs.end} onChange={e=>setHobbs(h=>({...h,end:e.target.value}))} placeholder="849.2" />
+      </div>
+      <div>
+        <label>Delta</label>
+        <div style={{ padding:'9px 12px', background:'var(--bg1)', border:'1px solid var(--border2)', borderRadius:8, fontSize:13, color: hobbs.start&&hobbs.end&&parseFloat(hobbs.end)>parseFloat(hobbs.start)?'var(--blue)':'var(--text3)' }}>
+          {hobbs.start&&hobbs.end&&parseFloat(hobbs.end)>parseFloat(hobbs.start)?'+'+((parseFloat(hobbs.end)-parseFloat(hobbs.start)).toFixed(1)):'--'} h
+        </div>
+      </div>
+    </div>
+    <div style={{ marginTop:6, fontSize:11, color:'var(--text3)' }}>
+      Hobbs difere das horas de voo pois inclui taxi e aquecimento. Usado para calculo real do TBO.
+    </div>
+  </div>
         )}
       </div>
 
