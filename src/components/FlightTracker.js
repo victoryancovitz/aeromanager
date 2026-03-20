@@ -77,7 +77,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
     if (state.status === 'landed') {
       const mins = timeDiffMin(state.takeoffTime, state.landingTime);
       setConfirmForm({
-        departureIcao:   state.departureIcao  || '',
+      departureIcao: (state.departureIcao && state.departureIcao.length === 4) ? state.departureIcao : '',
         destinationIcao: (state.destinationIcao && state.destinationIcao.length===4) ? state.destinationIcao : '',
         flightTimeMinutes: mins,
         distanceNm:      state.distanceNm || 0,
