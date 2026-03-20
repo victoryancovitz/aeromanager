@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { tracker, getTrackerState, exportGPX } from '../tracker';
-import { getAircraft, saveCost } from '../store';
+import { getAircraft, saveCost, getFlights } from '../store';
 
 const STATUS_CONFIG = {
   idle:            { label: 'Pronto para voar',   color: '#5a6080', bg: '#1e2230',  dot: '#5a6080' },
@@ -28,6 +28,16 @@ export default function FlightTrackerPage({ reload, setPage }) {
       setAircraft(data || []);
       if (data?.length) setSelectedAc(prev => prev || data[0].id);
     });
+
+  // Buscar hobbs_end do ultimo voo ao trocar de aeronave
+  useEffect(() => {
+    if (!selectedAc) return;
+    getFlights().then(flights => {
+      const mine = flights.filter(f => f.aircraftId === selectedAc && f.hobbsEnd)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+      if (mine.length > 0) setHobbsStart(String(mine[0].hobbsEnd));
+    }).catch(() => {});
+  }, [selectedAc]);
   }, []);
   const [state, setState] = useState(getTrackerState);
   const [selectedAc, setSelectedAc] = useState(aircraft[0]?.id || '');
@@ -68,7 +78,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
       const mins = timeDiffMin(state.takeoffTime, state.landingTime);
       setConfirmForm({
         departureIcao:   state.departureIcao  || '',
-        destinationIcao: state.destinationIcao|| '',
+        destinationIcao: (state.destinationIcao && state.destinationIcao.length===4) ? state.destinationIcao : '',
         flightTimeMinutes: mins,
         distanceNm:      state.distanceNm || 0,
         cruiseAltitudeFt: state.cruiseAltitudeFt || 0,
@@ -218,7 +228,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
       <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
         <div className="section-title">Combustível (opcional)</div>
         <div className="g3">
-          <div><label>Litros</label>
+          <div><label>Litros abastecidos</label>
             <input type="number" step="0.1" value={fuel.liters} onChange={e => setFuel(f=>({...f,liters:e.target.value}))} placeholder="80" />
           </div>
           <div><label>R$/litro</label>
