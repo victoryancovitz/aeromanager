@@ -28,16 +28,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
       setAircraft(data || []);
       if (data?.length) setSelectedAc(prev => prev || data[0].id);
     });
-
-  // Buscar hobbs_end do ultimo voo ao trocar de aeronave
-  useEffect(() => {
-    if (!selectedAc) return;
-    getFlights().then(flights => {
-      const mine = flights.filter(f => f.aircraftId === selectedAc && f.hobbsEnd)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-      if (mine.length > 0) setHobbsStart(String(mine[0].hobbsEnd));
-    }).catch(() => {});
-  }, [selectedAc]);
   }, []);
   const [state, setState] = useState(getTrackerState);
   const [selectedAc, setSelectedAc] = useState(aircraft[0]?.id || '');
@@ -49,6 +39,8 @@ export default function FlightTrackerPage({ reload, setPage }) {
   const [hobbsStart, setHobbsStart] = useState('');
   const [hobbsEnd,   setHobbsEnd  ] = useState('');
   const [saved, setSaved] = useState(null);
+  const [hobbsStart, setHobbsStart] = useState('');
+  const [hobbsEnd,   setHobbsEnd  ] = useState('');
   const unsubRef = useRef();
   const timerRef = useRef();
 
@@ -59,6 +51,17 @@ export default function FlightTrackerPage({ reload, setPage }) {
     });
     return () => { if (unsubRef.current) unsubRef.current(); };
   }, []);
+
+  // Auto-fill hobbs do ultimo voo ao carregar aeronaves
+  useEffect(() => {
+    if (!selectedAc) return;
+    getFlights().then(flights => {
+      const last = flights
+        .filter(f => f.aircraftId === selectedAc && f.hobbsEnd)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      if (last) setHobbsStart(String(last.hobbsEnd));
+    }).catch(() => {});
+  }, [selectedAc]);
 
   // Elapsed timer
   useEffect(() => {
@@ -77,8 +80,8 @@ export default function FlightTrackerPage({ reload, setPage }) {
     if (state.status === 'landed') {
       const mins = timeDiffMin(state.takeoffTime, state.landingTime);
       setConfirmForm({
-      departureIcao: (state.departureIcao && state.departureIcao.length === 4) ? state.departureIcao : '',
-        destinationIcao: (state.destinationIcao && state.destinationIcao.length===4) ? state.destinationIcao : '',
+        departureIcao:   state.departureIcao  || '',
+        destinationIcao: (state.destinationIcao && state.destinationIcao.length === 4) ? state.destinationIcao : '',
         flightTimeMinutes: mins,
         distanceNm:      state.distanceNm || 0,
         cruiseAltitudeFt: state.cruiseAltitudeFt || 0,
@@ -226,7 +229,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
       </div>
 
       <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-        <div className="section-title">Combustível (opcional)</div>
+        <div className="section-title">Abastecimento pós-voo (opcional)</div>
         <div className="g3">
           <div><label>Litros abastecidos</label>
             <input type="number" step="0.1" value={fuel.liters} onChange={e => setFuel(f=>({...f,liters:e.target.value}))} placeholder="80" />
@@ -243,6 +246,24 @@ export default function FlightTrackerPage({ reload, setPage }) {
             Custo combustível: <strong>R$ {(parseFloat(fuel.liters) * parseFloat(fuel.pricePerLiter)).toFixed(2).replace('.',',')}</strong> — será lançado automaticamente
           </div>
         )}
+      </div>
+
+      <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+        <div className="section-title">Horímetro Hobbs — opcional</div>
+        <div className="g3">
+          <div><label>Leitura inicial</label>
+            <input type="number" step="0.1" value={hobbsStart} onChange={e => setHobbsStart(e.target.value)} placeholder="847.5" />
+          </div>
+          <div><label>Leitura final</label>
+            <input type="number" step="0.1" value={hobbsEnd} onChange={e => setHobbsEnd(e.target.value)} placeholder="849.2" />
+          </div>
+          <div><label>Delta Hobbs</label>
+            <div style={{ padding: '9px 12px', background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, color: hobbsStart && hobbsEnd && parseFloat(hobbsEnd) > parseFloat(hobbsStart) ? '#4a9eff' : '#5a6080' }}>
+              {hobbsStart && hobbsEnd && parseFloat(hobbsEnd) > parseFloat(hobbsStart) ? '+' + (parseFloat(hobbsEnd) - parseFloat(hobbsStart)).toFixed(1) + ' h' : '-- h'}
+            </div>
+          </div>
+        </div>
+        <p style={{ margin: '6px 0 0', fontSize: 11, color: '#5a6080' }}>Hobbs inclui taxi e aquecimento — diferente das horas de voo. Essencial para TBO real.</p>
       </div>
 
       <div className="card" style={{ padding: '16px 18px', marginBottom: 20 }}>
