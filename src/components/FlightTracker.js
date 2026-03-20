@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { tracker, getTrackerState, exportGPX } from '../tracker';
-import { getAircraft, saveCost, getFlights } from '../store';
+import { getAircraft, saveCost } from '../store';
 
 const STATUS_CONFIG = {
   idle:            { label: 'Pronto para voar',   color: '#5a6080', bg: '#1e2230',  dot: '#5a6080' },
@@ -26,7 +26,16 @@ export default function FlightTrackerPage({ reload, setPage }) {
   useEffect(() => {
     getAircraft().then(data => {
       setAircraft(data || []);
-      if (data?.length) setSelectedAc(prev => prev || data[0].id);
+      if (data?.length) {
+        setSelectedAc(prev => prev || data[0].id);
+        if (!hobbsFilledRef.current) {
+          hobbsFilledRef.current = true;
+          const acId = data[0].id;
+          supabase.from('flights').select('hobbs_end,date').eq('aircraft_id',acId).not('hobbs_end','is',null).order('date',{ascending:false}).limit(1)
+            .then(({data:rows})=>{ if(rows?.[0]?.hobbs_end) setHobbsStart(String(rows[0].hobbs_end)); })
+            .catch(()=>{});
+        }
+      }
     });
   }, []);
   const [state, setState] = useState(getTrackerState);
@@ -42,6 +51,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
   const [hobbsStart, setHobbsStart] = useState('');
   const [hobbsEnd,   setHobbsEnd  ] = useState('');
   const unsubRef = useRef();
+  const hobbsFilledRef = useRef(false);
   const timerRef = useRef();
 
   useEffect(() => {
@@ -51,17 +61,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
     });
     return () => { if (unsubRef.current) unsubRef.current(); };
   }, []);
-
-  // Auto-fill hobbs do ultimo voo ao carregar aeronaves
-  useEffect(() => {
-    if (!selectedAc) return;
-    getFlights().then(flights => {
-      const last = flights
-        .filter(f => f.aircraftId === selectedAc && f.hobbsEnd)
-        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-      if (last) setHobbsStart(String(last.hobbsEnd));
-    }).catch(() => {});
-  }, [selectedAc]);
 
   // Elapsed timer
   useEffect(() => {
@@ -81,7 +80,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
       const mins = timeDiffMin(state.takeoffTime, state.landingTime);
       setConfirmForm({
       departureIcao:   (state.departureIcao  && state.departureIcao.length  === 4) ? state.departureIcao  : '',
-        destinationIcao: (state.destinationIcao && state.destinationIcao.length === 4) ? state.destinationIcao : '',
+      destinationIcao: (state.destinationIcao && state.destinationIcao.length === 4) ? state.destinationIcao : '',
         flightTimeMinutes: mins,
         distanceNm:      state.distanceNm || 0,
         cruiseAltitudeFt: state.cruiseAltitudeFt || 0,
