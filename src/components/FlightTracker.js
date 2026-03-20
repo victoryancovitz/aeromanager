@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { tracker, getTrackerState, exportGPX } from '../tracker';
-import { getAircraft, saveCost } from '../store';
+import { getAircraft, saveCost, getFlights } from '../store';
 
 const STATUS_CONFIG = {
   idle:            { label: 'Pronto para voar',   color: '#5a6080', bg: '#1e2230',  dot: '#5a6080' },
@@ -28,13 +28,12 @@ export default function FlightTrackerPage({ reload, setPage }) {
       setAircraft(data || []);
       if (data?.length) {
         setSelectedAc(prev => prev || data[0].id);
-        if (!hobbsFilledRef.current) {
-          hobbsFilledRef.current = true;
-          const acId = data[0].id;
-          supabase.from('flights').select('hobbs_end,date').eq('aircraft_id',acId).not('hobbs_end','is',null).order('date',{ascending:false}).limit(1)
-            .then(({data:rows})=>{ if(rows?.[0]?.hobbs_end) setHobbsStart(String(rows[0].hobbs_end)); })
-            .catch(()=>{});
-        }
+        getFlights().then(fls => {
+          const ac0 = data[0].id;
+          const last = fls.filter(f => f.aircraftId === ac0 && f.hobbsEnd)
+            .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+          if (last) setHobbsStart(String(last.hobbsEnd));
+        }).catch(() => {});
       }
     });
   }, []);
@@ -51,7 +50,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
   const [hobbsStart, setHobbsStart] = useState('');
   const [hobbsEnd,   setHobbsEnd  ] = useState('');
   const unsubRef = useRef();
-  const hobbsFilledRef = useRef(false);
   const timerRef = useRef();
 
   useEffect(() => {
@@ -245,24 +243,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
             Custo combustível: <strong>R$ {(parseFloat(fuel.liters) * parseFloat(fuel.pricePerLiter)).toFixed(2).replace('.',',')}</strong> — será lançado automaticamente
           </div>
         )}
-      </div>
-
-      <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-        <div className="section-title">Horímetro Hobbs — opcional</div>
-        <div className="g3">
-          <div><label>Leitura inicial</label>
-            <input type="number" step="0.1" value={hobbsStart} onChange={e => setHobbsStart(e.target.value)} placeholder="847.5" />
-          </div>
-          <div><label>Leitura final</label>
-            <input type="number" step="0.1" value={hobbsEnd} onChange={e => setHobbsEnd(e.target.value)} placeholder="849.2" />
-          </div>
-          <div><label>Delta Hobbs</label>
-            <div style={{ padding: '9px 12px', background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, color: hobbsStart && hobbsEnd && parseFloat(hobbsEnd) > parseFloat(hobbsStart) ? '#4a9eff' : '#5a6080' }}>
-              {hobbsStart && hobbsEnd && parseFloat(hobbsEnd) > parseFloat(hobbsStart) ? '+' + (parseFloat(hobbsEnd) - parseFloat(hobbsStart)).toFixed(1) + ' h' : '-- h'}
-            </div>
-          </div>
-        </div>
-        <p style={{ margin: '6px 0 0', fontSize: 11, color: '#5a6080' }}>Hobbs inclui taxi e aquecimento — diferente das horas de voo. Essencial para TBO real.</p>
       </div>
 
       <div className="card" style={{ padding: '16px 18px', marginBottom: 20 }}>
