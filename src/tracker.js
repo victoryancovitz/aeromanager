@@ -292,7 +292,9 @@ class FlightTracker {
     const state   = getTrackerState();
     const points  = getTrackPoints();
 
-    if (!state.takeoffTime || !state.landingTime) return null;
+    // Use current time as fallback if GPS times missing (manual landing)
+    if (!state.takeoffTime) state.takeoffTime = new Date(Date.now() - ((overrides.flightTimeMinutes||60)*60000)).toISOString();
+    if (!state.landingTime) state.landingTime = new Date().toISOString();
 
     const takeoff  = new Date(state.takeoffTime);
     const landing  = new Date(state.landingTime);
