@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { tracker, getTrackerState, exportGPX } from '../tracker';
-import { getAircraft, saveCost, getFlights } from '../store';
+import { getAircraft, saveCost } from '../store';
 
 const STATUS_CONFIG = {
   idle:            { label: 'Pronto para voar',   color: '#5a6080', bg: '#1e2230',  dot: '#5a6080' },
@@ -26,15 +26,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
   useEffect(() => {
     getAircraft().then(data => {
       setAircraft(data || []);
-      if (data?.length) {
-        setSelectedAc(prev => prev || data[0].id);
-        getFlights().then(fls => {
-          const ac0 = data[0].id;
-          const last = fls.filter(f => f.aircraftId === ac0 && f.hobbsEnd)
-            .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-          if (last) setHobbsStart(String(last.hobbsEnd));
-        }).catch(() => {});
-      }
+      if (data?.length) setSelectedAc(prev => prev || data[0].id);
     });
   }, []);
   const [state, setState] = useState(getTrackerState);
@@ -47,8 +39,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
   const [hobbsStart, setHobbsStart] = useState('');
   const [hobbsEnd,   setHobbsEnd  ] = useState('');
   const [saved, setSaved] = useState(null);
-  const [hobbsStart, setHobbsStart] = useState('');
-  const [hobbsEnd,   setHobbsEnd  ] = useState('');
   const unsubRef = useRef();
   const timerRef = useRef();
 
@@ -77,8 +67,8 @@ export default function FlightTrackerPage({ reload, setPage }) {
     if (state.status === 'landed') {
       const mins = timeDiffMin(state.takeoffTime, state.landingTime);
       setConfirmForm({
-      departureIcao:   (state.departureIcao  && state.departureIcao.length  === 4) ? state.departureIcao  : '',
-      destinationIcao: (state.destinationIcao && state.destinationIcao.length === 4) ? state.destinationIcao : '',
+        departureIcao:   state.departureIcao  || '',
+        destinationIcao: state.destinationIcao|| '',
         flightTimeMinutes: mins,
         distanceNm:      state.distanceNm || 0,
         cruiseAltitudeFt: state.cruiseAltitudeFt || 0,
@@ -226,9 +216,9 @@ export default function FlightTrackerPage({ reload, setPage }) {
       </div>
 
       <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-        <div className="section-title">Abastecimento pós-voo (opcional)</div>
+        <div className="section-title">Combustível (opcional)</div>
         <div className="g3">
-          <div><label>Litros abastecidos</label>
+          <div><label>Litros</label>
             <input type="number" step="0.1" value={fuel.liters} onChange={e => setFuel(f=>({...f,liters:e.target.value}))} placeholder="80" />
           </div>
           <div><label>R$/litro</label>
