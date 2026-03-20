@@ -3,10 +3,10 @@ import { tracker, getTrackerState, exportGPX } from '../tracker';
 import { getAircraft, saveCost, getFlights } from '../store';
 
 const STATUS_CONFIG = {
-  idle:            { label: 'Pronto para voar',   color: '#5a6080', bg: '#1e2230',  dot: '#5a6080' },
+  idle:            { label: 'Pronto para voar',     color: '#5a6080', bg: '#1e2230', dot: '#5a6080' },
   waiting_takeoff: { label: 'Aguardando decolagem', color: '#f5a623', bg: '#3d2800', dot: '#f5a623' },
-  airborne:        { label: 'EM VOO',              color: '#3dd68c', bg: '#0d3320',  dot: '#3dd68c' },
-  landed:          { label: 'Pousou — confirmar',  color: '#4a9eff', bg: '#1e3a5f',  dot: '#4a9eff' },
+  airborne:        { label: 'EM VOO',               color: '#3dd68c', bg: '#0d3320', dot: '#3dd68c' },
+  landed:          { label: 'Pousou — confirmar',   color: '#4a9eff', bg: '#1e3a5f', dot: '#4a9eff' },
 };
 
 function formatDuration(minutes) {
@@ -37,16 +37,17 @@ export default function FlightTrackerPage({ reload, setPage }) {
       }
     });
   }, []);
-  const [state, setState] = useState(getTrackerState);
-  const [selectedAc, setSelectedAc] = useState(aircraft[0]?.id || '');
-  const [elapsed, setElapsed] = useState(0);
+
+  const [state,       setState      ] = useState(getTrackerState);
+  const [selectedAc,  setSelectedAc ] = useState(aircraft[0]?.id || '');
+  const [elapsed,     setElapsed    ] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmForm, setConfirmForm] = useState({});
-  const [fuel, setFuel] = useState({ liters: '', pricePerLiter: '', vendor: '' });
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(null);
-  const [hobbsStart, setHobbsStart] = useState('');
-  const [hobbsEnd,   setHobbsEnd  ] = useState('');
+  const [fuel,        setFuel       ] = useState({ liters: '', pricePerLiter: '', vendor: '' });
+  const [saving,      setSaving     ] = useState(false);
+  const [saved,       setSaved      ] = useState(null);
+  const [hobbsStart,  setHobbsStart ] = useState('');
+  const [hobbsEnd,    setHobbsEnd   ] = useState('');
   const unsubRef = useRef();
   const timerRef = useRef();
 
@@ -58,7 +59,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
     return () => { if (unsubRef.current) unsubRef.current(); };
   }, []);
 
-  // Elapsed timer
   useEffect(() => {
     if (state.status === 'airborne' && state.takeoffTime) {
       timerRef.current = setInterval(() => {
@@ -75,14 +75,14 @@ export default function FlightTrackerPage({ reload, setPage }) {
     if (state.status === 'landed') {
       const mins = timeDiffMin(state.takeoffTime, state.landingTime);
       setConfirmForm({
-      departureIcao:   (state.departureIcao  && state.departureIcao.length  === 4) ? state.departureIcao  : '',
-      destinationIcao: (state.destinationIcao && state.destinationIcao.length === 4) ? state.destinationIcao : ',
+        departureIcao:    (state.departureIcao  && state.departureIcao.length  === 4) ? state.departureIcao  : '',
+        destinationIcao:  (state.destinationIcao && state.destinationIcao.length === 4) ? state.destinationIcao : '',
         flightTimeMinutes: mins,
-        distanceNm:      state.distanceNm || 0,
-        cruiseAltitudeFt: state.cruiseAltitudeFt || 0,
-        flightConditions: 'vfr',
-        purpose:         'leisure',
-        logbookNotes:    '',
+        distanceNm:        state.distanceNm || 0,
+        cruiseAltitudeFt:  state.cruiseAltitudeFt || 0,
+        flightConditions:  'vfr',
+        purpose:           'leisure',
+        logbookNotes:      '',
       });
     }
   }, [state.status]);
@@ -92,29 +92,32 @@ export default function FlightTrackerPage({ reload, setPage }) {
     try {
       await tracker.start(selectedAc);
     } catch (e) {
-      alert(`Erro ao iniciar GPS: ${e.message}\n\nVerifique se o app tem permissão de localização nas configurações do iPhone.`);
+      alert(`Erro ao iniciar GPS: ${e.message}\n\nVerifique se o app tem permissão de localização.`);
     }
   }
 
   async function confirmAndSave() {
     setSaving(true);
     try {
-      const saved = await tracker.confirmFlight({ ...confirmForm, hobbsStart: hobbsStart ? parseFloat(hobbsStart) : null, hobbsEnd: hobbsEnd ? parseFloat(hobbsEnd) : null });
-      // Auto-create fuel cost if filled
+      const savedFlight = await tracker.confirmFlight({
+        ...confirmForm,
+        hobbsStart: hobbsStart ? parseFloat(hobbsStart) : null,
+        hobbsEnd:   hobbsEnd   ? parseFloat(hobbsEnd)   : null,
+      });
       if (fuel.liters && fuel.pricePerLiter) {
         await saveCost({
           aircraftId:    state.aircraftId,
-          flightId:      saved.id,
+          flightId:      savedFlight.id,
           category:      'fuel',
           costType:      'variable',
           amountBrl:     parseFloat(fuel.liters) * parseFloat(fuel.pricePerLiter),
           description:   `AVGAS — ${fuel.liters}L @ R$${fuel.pricePerLiter}`,
-          referenceDate: saved.date,
+          referenceDate: savedFlight.date,
           vendor:        fuel.vendor || '',
         });
       }
       reload();
-      setSaved(saved);
+      setSaved(savedFlight);
       setShowConfirm(false);
       setState({ status: 'idle' });
     } catch(e) {
@@ -135,9 +138,9 @@ export default function FlightTrackerPage({ reload, setPage }) {
     const gpx = exportGPX();
     if (!gpx) return;
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
     a.download = `voo_${new Date().toISOString().slice(0,10)}.gpx`;
     a.click();
     URL.revokeObjectURL(url);
@@ -146,7 +149,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
   const sc = STATUS_CONFIG[state.status] || STATUS_CONFIG.idle;
   const ac = aircraft.find(a => a.id === (state.aircraftId || selectedAc));
 
-  // ── SAVED CONFIRMATION ────────────────────────────────────────
+  // ── SAVED ──────────────────────────────────────────────────────
   if (saved) return (
     <div style={{ padding: 24, maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>✈</div>
@@ -156,11 +159,12 @@ export default function FlightTrackerPage({ reload, setPage }) {
       </div>
       <div style={{ background: '#0d3320', border: '1px solid #3dd68c44', borderRadius: 12, padding: '16px 20px', marginBottom: 20, textAlign: 'left' }}>
         {[
-          ['Diário de bordo', '✓ Criado'],
-          ['Horímetro', '✓ Atualizado'],
-          ['Ciclos', '✓ +1 pouso'],
-          ['Manutenção', '✓ Horas deduzidas'],
+          ['Diário de bordo',   '✓ Criado'],
+          ['Horímetro',         '✓ Atualizado'],
+          ['Ciclos',            '✓ +1 pouso'],
+          ['Manutenção',        '✓ Horas deduzidas'],
           ['Custo combustível', fuel.liters ? '✓ Lançado automaticamente' : '— não preenchido'],
+          ['Hobbs',             saved.hobbsStart ? `✓ +${((saved.hobbsEnd||0)-(saved.hobbsStart||0)).toFixed(1)}h` : '— não preenchido'],
         ].map(([k, v]) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #1e2230', fontSize: 13 }}>
             <span style={{ color: '#9aa0b8' }}>{k}</span>
@@ -176,7 +180,7 @@ export default function FlightTrackerPage({ reload, setPage }) {
     </div>
   );
 
-  // ── CONFIRM FLIGHT OVERLAY ────────────────────────────────────
+  // ── CONFIRM ────────────────────────────────────────────────────
   if (showConfirm) return (
     <div style={{ padding: 20, maxWidth: 500, margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -189,10 +193,10 @@ export default function FlightTrackerPage({ reload, setPage }) {
         <div className="section-title">Dados do voo</div>
         <div className="g3" style={{ marginBottom: 12 }}>
           <div><label>Origem (ICAO)</label>
-            <input value={confirmForm.departureIcao || ''} onChange={e => setConfirmForm(f => ({...f, departureIcao: e.target.value.toUpperCase()}))} placeholder="SBBR" maxLength={4} />
+            <input value={confirmForm.departureIcao || ''} onChange={e => setConfirmForm(f => ({...f, departureIcao: e.target.value.toUpperCase()}))} placeholder="SBSR" maxLength={4} />
           </div>
           <div><label>Destino (ICAO)</label>
-            <input value={confirmForm.destinationIcao || ''} onChange={e => setConfirmForm(f => ({...f, destinationIcao: e.target.value.toUpperCase()}))} placeholder="SBGR" maxLength={4} />
+            <input value={confirmForm.destinationIcao || ''} onChange={e => setConfirmForm(f => ({...f, destinationIcao: e.target.value.toUpperCase()}))} placeholder="SBKP" maxLength={4} />
           </div>
           <div><label>Duração (min)</label>
             <input type="number" value={confirmForm.flightTimeMinutes || ''} onChange={e => setConfirmForm(f => ({...f, flightTimeMinutes: parseInt(e.target.value)||0}))} />
@@ -238,9 +242,31 @@ export default function FlightTrackerPage({ reload, setPage }) {
         </div>
         {fuel.liters && fuel.pricePerLiter && (
           <div style={{ marginTop: 8, padding: '8px 12px', background: '#0d3320', borderRadius: 8, fontSize: 12, color: '#3dd68c' }}>
-            Custo combustível: <strong>R$ {(parseFloat(fuel.liters) * parseFloat(fuel.pricePerLiter)).toFixed(2).replace('.',',')}</strong> — será lançado automaticamente
+            Custo: <strong>R$ {(parseFloat(fuel.liters) * parseFloat(fuel.pricePerLiter)).toFixed(2).replace('.',',')}</strong> — será lançado automaticamente
           </div>
         )}
+      </div>
+
+      <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+        <div className="section-title">Horímetro Hobbs — opcional</div>
+        <div className="g3">
+          <div><label>Leitura inicial</label>
+            <input type="number" step="0.1" value={hobbsStart} onChange={e => setHobbsStart(e.target.value)} placeholder="847.5" />
+          </div>
+          <div><label>Leitura final</label>
+            <input type="number" step="0.1" value={hobbsEnd} onChange={e => setHobbsEnd(e.target.value)} placeholder="849.2" />
+          </div>
+          <div><label>Delta Hobbs</label>
+            <div style={{ padding: '9px 12px', background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, color: hobbsStart && hobbsEnd && parseFloat(hobbsEnd) > parseFloat(hobbsStart) ? '#4a9eff' : '#5a6080' }}>
+              {hobbsStart && hobbsEnd && parseFloat(hobbsEnd) > parseFloat(hobbsStart)
+                ? '+' + (parseFloat(hobbsEnd) - parseFloat(hobbsStart)).toFixed(1) + ' h'
+                : '-- h'}
+            </div>
+          </div>
+        </div>
+        <p style={{ margin: '6px 0 0', fontSize: 11, color: '#5a6080' }}>
+          Hobbs inclui taxi e aquecimento — diferente das horas de voo. Essencial para TBO real.
+        </p>
       </div>
 
       <div className="card" style={{ padding: '16px 18px', marginBottom: 20 }}>
@@ -273,11 +299,10 @@ export default function FlightTrackerPage({ reload, setPage }) {
     </div>
   );
 
-  // ── MAIN TRACKER SCREEN ───────────────────────────────────────
+  // ── MAIN ───────────────────────────────────────────────────────
   return (
     <div style={{ padding: 20, maxWidth: 480, margin: '0 auto' }}>
 
-      {/* Status banner */}
       <div style={{ background: sc.bg, border: `1px solid ${sc.color}44`, borderRadius: 14, padding: '20px 24px', marginBottom: 20, textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
           <div style={{ width: 10, height: 10, borderRadius: '50%', background: sc.dot, boxShadow: `0 0 8px ${sc.dot}`, animation: state.status==='airborne'?'pulse 2s infinite':'' }} />
@@ -287,12 +312,12 @@ export default function FlightTrackerPage({ reload, setPage }) {
         {state.status === 'airborne' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginTop: 16 }}>
             {[
-              { label: 'Tempo de voo', value: formatDuration(elapsed), color: '#3dd68c' },
-              { label: 'Velocidade', value: `${state.currentSpeedKt || 0} kt`, color: '#4a9eff' },
-              { label: 'Altitude', value: `${(state.currentAltFt || 0).toLocaleString('pt-BR')} ft`, color: '#f5a623' },
-              { label: 'Distância', value: `${(state.distanceNm || 0).toFixed(1)} nm`, color: '#9b6dff' },
-              { label: 'Razao V/S', value: (state.currentVsFpm > 0 ? '+' : '') + (state.currentVsFpm || 0) + ' ft/min', color: state.currentVsFpm > 200 ? '#3dd68c' : state.currentVsFpm < -200 ? '#ff6b6b' : '#9aa0b8' },
-              { label: 'Alt AGL', value: (state.currentAltAGL || 0).toLocaleString('pt-BR') + ' ft', color: '#f5a623' },
+              { label: 'Tempo de voo', value: formatDuration(elapsed),                                                        color: '#3dd68c' },
+              { label: 'Velocidade',   value: `${state.currentSpeedKt || 0} kt`,                                              color: '#4a9eff' },
+              { label: 'Altitude',     value: `${(state.currentAltFt || 0).toLocaleString('pt-BR')} ft`,                      color: '#f5a623' },
+              { label: 'Distância',    value: `${(state.distanceNm || 0).toFixed(1)} nm`,                                     color: '#9b6dff' },
+              { label: 'Razão V/S',    value: (state.currentVsFpm > 0 ? '+' : '') + (state.currentVsFpm || 0) + ' ft/min',   color: state.currentVsFpm > 200 ? '#3dd68c' : state.currentVsFpm < -200 ? '#ff6b6b' : '#9aa0b8' },
+              { label: 'Alt AGL',      value: (state.currentAltAGL || 0).toLocaleString('pt-BR') + ' ft',                    color: '#f5a623' },
             ].map(s => (
               <div key={s.label} style={{ background: '#0f1117', borderRadius: 8, padding: '10px 8px', textAlign: 'center' }}>
                 <div style={{ fontSize: 9, color: '#5a6080', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>{s.label}</div>
@@ -305,12 +330,11 @@ export default function FlightTrackerPage({ reload, setPage }) {
         {state.status === 'waiting_takeoff' && (
           <div style={{ marginTop: 12, fontSize: 13, color: '#f5a623' }}>
             GPS ativo · Aguardando você decolar...
-            <div style={{ fontSize: 11, color: '#9aa0b8', marginTop: 4 }}>A decolagem será detectada automaticamente quando a velocidade superar 40 kt</div>
+            <div style={{ fontSize: 11, color: '#9aa0b8', marginTop: 4 }}>Decolagem detectada automaticamente acima de 40 kt</div>
           </div>
         )}
       </div>
 
-      {/* Aircraft selector (only when idle) */}
       {state.status === 'idle' && (
         <div className="card" style={{ padding: '16px 18px', marginBottom: 16 }}>
           <div className="section-title">Selecionar aeronave</div>
@@ -324,7 +348,6 @@ export default function FlightTrackerPage({ reload, setPage }) {
         </div>
       )}
 
-      {/* Aircraft info (when tracking) */}
       {state.status !== 'idle' && ac && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#1e2230', borderRadius: 10, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>{ac.registration}</div>
@@ -337,16 +360,15 @@ export default function FlightTrackerPage({ reload, setPage }) {
         </div>
       )}
 
-      {/* How it works (idle) */}
       {state.status === 'idle' && (
         <div className="card" style={{ padding: '14px 18px', marginBottom: 20 }}>
           <div className="section-title">Como funciona</div>
           {[
-            ['1', 'Selecione a aeronave', 'Escolha qual aeronave você vai voar'],
-            ['2', 'Toque em Iniciar voo', 'O GPS começa a rastrear em segundo plano'],
-            ['3', 'Voe normalmente', 'Coloque o celular no bolso — decolagem e pouso detectados automaticamente'],
-            ['4', 'Confirme ao pousar', 'Aparece uma tela com os dados pré-preenchidos para você revisar'],
-            ['5', 'Tudo atualizado', 'Diário de bordo, horímetro, manutenção e custo criados automaticamente'],
+            ['1', 'Selecione a aeronave',  'Escolha qual aeronave você vai voar'],
+            ['2', 'Toque em Iniciar voo',  'O GPS começa a rastrear em segundo plano'],
+            ['3', 'Voe normalmente',        'Coloque o celular no bolso — decolagem e pouso detectados automaticamente'],
+            ['4', 'Confirme ao pousar',     'Aparece uma tela com os dados pré-preenchidos para você revisar'],
+            ['5', 'Tudo atualizado',        'Diário de bordo, horímetro, manutenção e custo criados automaticamente'],
           ].map(([n, title, desc]) => (
             <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
               <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#4a9eff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{n}</div>
@@ -362,34 +384,23 @@ export default function FlightTrackerPage({ reload, setPage }) {
         </div>
       )}
 
-      {/* Action button */}
       {state.status === 'idle' && (
-        <button
-          className="primary"
-          style={{ width: '100%', padding: '16px', fontSize: 16, fontWeight: 700, borderRadius: 12 }}
-          onClick={startTracking}
-          disabled={!selectedAc}
-        >
+        <button className="primary" style={{ width: '100%', padding: '16px', fontSize: 16, fontWeight: 700, borderRadius: 12 }}
+          onClick={startTracking} disabled={!selectedAc}>
           ✈ Iniciar rastreamento de voo
         </button>
       )}
 
       {state.status === 'waiting_takeoff' && (
-        <button
-          className="danger"
-          style={{ width: '100%', padding: '14px', fontSize: 14, borderRadius: 12 }}
-          onClick={discard}
-        >
+        <button className="danger" style={{ width: '100%', padding: '14px', fontSize: 14, borderRadius: 12 }} onClick={discard}>
           Cancelar rastreamento
         </button>
       )}
 
       {state.status === 'airborne' && (
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            style={{ flex: 2, padding: '14px', fontSize: 14, fontWeight: 600, background: '#4a9eff', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer' }}
-            onClick={() => setShowConfirm(true)}
-          >
+          <button style={{ flex: 2, padding: '14px', fontSize: 14, fontWeight: 600, background: '#4a9eff', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer' }}
+            onClick={() => setShowConfirm(true)}>
             🛬 Registrar pouso manual
           </button>
           <button className="danger" style={{ flex: 1, borderRadius: 12 }} onClick={discard}>Cancelar</button>

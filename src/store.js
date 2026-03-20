@@ -1130,3 +1130,59 @@ export async function removeComponent(id, cellHours, reason) {
   }).eq('id', id).eq('status', 'active');
   if (error) throw error;
 }
+
+// ── Aircraft Components (motores, hélices) ─────────────────────────────────────
+export async function getComponents(aircraftId) {
+  const { data, error } = await supabase
+    .from('aircraft_components')
+    .select('*')
+    .eq('aircraft_id', aircraftId)
+    .order('installed_date', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(r => ({
+    id: r.id, aircraftId: r.aircraft_id, type: r.component_type,
+    position: r.position, manufacturer: r.manufacturer, model: r.model,
+    serialNumber: r.serial_number, tboHours: r.tbo_hours, tboYears: r.tbo_years,
+    installedDate: r.installed_date, installedCellHours: r.installed_cell_hours,
+    tsnAtInstall: r.tsn_at_install, tsoAtInstall: r.tso_at_install,
+    removedDate: r.removed_date, removedCellHours: r.removed_cell_hours,
+    removedReason: r.removed_reason, status: r.status, notes: r.notes,
+  }));
+}
+
+export async function saveComponent(comp) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const row = {
+    aircraft_id: comp.aircraftId, user_id: user.id,
+    component_type: comp.type, position: comp.position || null,
+    manufacturer: comp.manufacturer, model: comp.model,
+    serial_number: comp.serialNumber || null,
+    tbo_hours: comp.tboHours || null, tbo_years: comp.tboYears || null,
+    installed_date: comp.installedDate, installed_cell_hours: comp.installedCellHours || null,
+    tsn_at_install: comp.tsnAtInstall || null, tso_at_install: comp.tsoAtInstall || null,
+    status: comp.status || 'active', notes: comp.notes || null,
+  };
+  if (comp.id) {
+    const { data, error } = await supabase.from('aircraft_components').update(row).eq('id', comp.id).select().single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase.from('aircraft_components').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+export async function removeComponent(id, cellHours, reason) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const { error } = await supabase.from('aircraft_components').update({
+    status: 'removed',
+    removed_date: new Date().toISOString().slice(0,10),
+    removed_cell_hours: cellHours || null,
+    removed_reason: reason || 'other',
+    removed_by_user_id: user.id,
+  }).eq('id', id).eq('status', 'active');
+  if (error) throw error;
+}
