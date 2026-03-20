@@ -126,7 +126,7 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
   const ms = useMultiSelect(aircraft);
 
   function startNew() { setForm({...EMPTY}); setEditing('new'); setSearchQuery(''); setTab('basic'); }
-  function startEdit(ac) { setForm({...ac, performanceProfiles:ac.performanceProfiles||[], climbProfiles:ac.climbProfiles||[]}); setEditing(ac.id); setSearchQuery(`${ac.manufacturer} ${ac.model}`); setTab('basic'); }
+  function startEdit(ac) { setForm({...ac, performanceProfiles:ac.performanceProfiles||[], climbProfiles:ac.climbProfiles||[]}); setEditing(ac.id); setSearchQuery(`${ac.manufacturer} ${ac.model}`); setTab('basic'); getComponents(ac.id).then(setComponents).catch(()=>{}); }
   function cancel() { setEditing(null); }
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
   async function submit(e) { e.preventDefault(); await saveAircraft(form); reload(); setEditing(null); }
@@ -167,6 +167,9 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
   }
 
   const [biasMap, setBiasMap] = useState({});
+  const [components, setComponents] = useState([]);
+  const [showAddComp, setShowAddComp] = useState(null); // 'engine' | 'propeller' | null
+  const [newComp, setNewComp] = useState({});
   useEffect(() => {
     aircraft.forEach(async ac => {
       const b = await computeFuelBias(ac.id);
@@ -174,7 +177,7 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
     });
   }, [aircraft]);
 
-  const TABS = [{ id:'basic',label:'Identificação'},{ id:'engine',label:'Motor'},{ id:'hours',label:'Horímetro'},{ id:'perf',label:'Performance'},{ id:'climb',label:'Subida'}];
+  const TABS = [{ id:'basic',label:'Identificação'},{ id:'engine',label:'Motor'},{ id:'propeller',label:'Hélice'},{ id:'hours',label:'Célula'},{ id:'perf',label:'Performance'},{ id:'climb',label:'Subida'}];
   const perfCols = [{ key:'altFt',label:'Alt (ft)'},{ key:'power',label:'Pot (%)'},{ key:'ktas',label:'KTAS'},{ key:'fuelLph',label:'L/h'}];
   const climbCols = [{ key:'altFromFt',label:'De (ft)'},{ key:'altToFt',label:'Para (ft)'},{ key:'kias',label:'KIAS'},{ key:'fpm',label:'ft/min'},{ key:'fuelLph',label:'L/h'},{ key:'distNm',label:'nm'}];
 
