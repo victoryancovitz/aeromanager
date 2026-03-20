@@ -240,7 +240,45 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
             <div><label>Fuel bias manual (%)</label><input type="number" step="0.1" value={form.fuelBiasManual||''} onChange={e=>set('fuelBiasManual',e.target.value?parseFloat(e.target.value):null)} placeholder="+5 ou -2" /></div>
           </div>
         </div>}
-        {tab==='hours' && <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+        
+      {tab==='propeller' && <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+          <div style={{ gridColumn:'1/3' }}><label>Modelo da hélice</label><input value={form.propModel||''} onChange={e=>set('propModel',e.target.value)} placeholder="McCauley 1C160/DTM7553" /></div>
+          <div><label>Número de série</label><input value={form.propSerial||''} onChange={e=>set('propSerial',e.target.value)} placeholder="AB-12345" /></div>
+          <div><label>TBO hélice (h)</label><input type="number" value={form.propTboHours||''} onChange={e=>set('propTboHours',e.target.value)} placeholder="2400" /></div>
+          <div><label>TBO hélice (anos)</label><input type="number" value={form.propTboYears||''} onChange={e=>set('propTboYears',e.target.value)} placeholder="6" /></div>
+          <div><label>Horas desde overhaul</label><input type="number" step="0.1" value={form.propTso||''} onChange={e=>set('propTso',e.target.value)} placeholder="0" /></div>
+        </div>
+        <hr style={{ margin:'16px 0', borderColor:'var(--border2)' }} />
+        <div className="section-title">Componentes instalados — Hélice</div>
+        {components.filter(c=>c.type==='propeller' && c.status==='active').map(c=>(
+          <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'var(--bg1)', borderRadius:8, marginBottom:8 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:600, fontSize:13 }}>{c.manufacturer} {c.model}</div>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>S/N: {c.serialNumber||'—'} · TBO: {c.tboHours||'?'}h · Instalada: {c.installedDate}</div>
+            </div>
+            <button type="button" style={{ fontSize:11, color:'#ff6b6b', background:'none', border:'1px solid #ff6b6b44', borderRadius:6, padding:'4px 10px', cursor:'pointer' }}
+              onClick={()=>{ if(window.confirm('Registrar remoção desta hélice?')) removeComponent(c.id, form.totalAirframeHours||null,'swap').then(()=>getComponents(form.id).then(setComponents)).catch(e=>alert(e.message)); }}>
+              Remover
+            </button>
+          </div>
+        ))}
+        {components.filter(c=>c.type==='propeller' && c.status==='removed').length>0 && (
+          <details style={{ marginTop:8 }}>
+            <summary style={{ fontSize:12, color:'var(--text3)', cursor:'pointer' }}>Histórico removidos ({components.filter(c=>c.type==='propeller'&&c.status==='removed').length})</summary>
+            {components.filter(c=>c.type==='propeller'&&c.status==='removed').map(c=>(
+              <div key={c.id} style={{ padding:'8px 12px', background:'var(--bg0)', borderRadius:6, margin:'4px 0', fontSize:12, color:'var(--text3)', opacity:0.7 }}>
+                <span style={{ fontWeight:600 }}>{c.manufacturer} {c.model}</span> · Removida: {c.removedDate} · Motivo: {c.removedReason}
+              </div>
+            ))}
+          </details>
+        )}
+        <button type="button" className="secondary" style={{ marginTop:10, fontSize:12 }}
+          onClick={()=>setShowAddComp('propeller')}>
+          + Adicionar hélice
+        </button>
+      </div>}
+      {tab==='hours' && <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
           <div className="g3" style={{ marginBottom:12 }}>
             <div><label>Horas célula (base)</label><input type="number" step="0.1" value={form.baseAirframeHours||''} onChange={e=>set('baseAirframeHours',e.target.value)} placeholder="1240.0" /></div>
             <div><label>Horas motor SMOH</label><input type="number" step="0.1" value={form.totalEngineHours||''} onChange={e=>set('totalEngineHours',e.target.value)} placeholder="640.0" /></div>
