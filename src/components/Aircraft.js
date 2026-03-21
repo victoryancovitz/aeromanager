@@ -5,6 +5,7 @@ import { AcIcon, ArcGauge, ProgressBar } from './Instruments';
 import { searchAircraftDB } from '../aircraftDB';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import IcaoInput from './IcaoInput';
+import AircraftSearchInput from './AircraftSearchInput';
 
 const EMPTY = {
   registration:'', type:'single_engine', manufacturer:'', model:'',
@@ -348,7 +349,7 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
         {tab==='basic' && (
           <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
             <div className="g3" style={{ marginBottom:14 }}>
-              <div><label>Matrícula *</label><input required value={form.registration} onChange={e=>set('registration',e.target.value.toUpperCase())} placeholder="PP-XRV" /></div>
+              <div><label>Matrícula *</label><AircraftSearchInput value={form.registration} onChange={(reg, data) => applyRAB(reg, data)} placeholder="PR-VCO, PP-XRV..." required className="" /><div style={{fontSize:10,color:'var(--text3)',marginTop:2}}>Digite a matrícula para preencher automaticamente com dados do RAB/ANAC</div></div>
               <div><label>Tipo *</label>
                 <select required value={form.type} onChange={e=>set('type',e.target.value)}>
                   <option value="single_engine">Monomotor</option>
