@@ -31,7 +31,7 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
       const upper = q.toUpperCase();
       const { data, error } = await supabase
         .from('airports_db')
-        .select('id, icao, name, city, state, type, lat, lng')
+        .select('id, icao, iata, name, city, state, type, lat, lng, elevation_ft, runway_length_ft, runway_surface, freq_tower, has_tower')
         .or(`icao.ilike.${upper}%,name.ilike.%${q}%,city.ilike.%${q}%`)
         .order('type', { ascending: false })
         .limit(10);
@@ -60,6 +60,8 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
   const handleSelect = (airport) => {
     setSelected(airport);
     setQuery(airport.icao || airport.name);
+    // Mostrar IATA se disponível
+    if (airport.iata) setQuery(airport.icao + (airport.iata ? ' / ' + airport.iata : ''));
     setOpen(false);
     setResults([]);
     if (onChange) onChange(airport.icao||'', airport);
@@ -98,6 +100,13 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
                   <span className="airport-search-item-name">{a.name}</span>
                   <span className="airport-search-item-city">{[a.city, a.state].filter(Boolean).join(' / ')}</span>
                   <span className="airport-search-item-type">{typeLabel(a.type)}</span>
+                  {(a.runway_length_ft || a.elevation_ft || a.has_tower) && (
+                    <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {a.runway_length_ft && <span>▬ {Math.round(a.runway_length_ft/3.281)}m</span>}
+                      {a.elevation_ft && <span>▲ {a.elevation_ft}ft</span>}
+                      {a.has_tower && <span style={{color:'#10b981'}}>TWR</span>}
+                    </span>
+                  )}
                 </button>
               ))}
               <button type="button" className="airport-search-not-found" onClick={() => { setOpen(false); setShowRegister(true); }}>
