@@ -4,6 +4,7 @@ import { saveFlight, deleteFlight } from '../store';
 import { AcIcon } from './Instruments';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import IcaoInput from './IcaoInput';
+import FBOModal from './FBOModal';
 import LogbookImportWizard from './LogbookImportWizard';
 
 const EMPTY = {
@@ -21,6 +22,7 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
   const [deleting, setDeleting] = useState(false);
   const [showLogbookImport, setShowLogbookImport] = useState(false);
   const [timeError, setTimeError] = useState('');
+  const [fboAirport, setFboAirport] = useState(null);
   const ms = useMultiSelect(flights);
 
   function calcMins(t, l) {
@@ -99,7 +101,18 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
             </div>
             <div className="g3" style={{ marginBottom:14 }}>
               <div><IcaoInput label="Origem (ICAO) *" required value={form.departureIcao} onChange={v=>set('departureIcao',v)} placeholder="SBBR" /></div>
-              <div><IcaoInput label="Destino (ICAO) *" required value={form.destinationIcao} onChange={v=>set('destinationIcao',v)} placeholder="SBGR" /></div>
+              <div>
+                <IcaoInput label="Destino (ICAO) *" required value={form.destinationIcao}
+                  onChange={(v) => set('destinationIcao', v)}
+                  placeholder="SBGR"
+                />
+                {form.destinationIcao && form.destinationIcao.length >= 3 && (
+                  <button type="button" onClick={() => setFboAirport({ icao: form.destinationIcao, name: form.destinationIcao })}
+                    style={{ marginTop:4, fontSize:11, padding:'3px 10px', background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:6, cursor:'pointer', color:'var(--accent)', display:'flex', alignItems:'center', gap:4 }}>
+                    ⛽ FBO &amp; Combustível
+                  </button>
+                )}
+              </div>
               <div><label>Alternado</label><input value={form.alternateIcao} onChange={e=>set('alternateIcao',e.target.value.toUpperCase())} placeholder="SBSP" maxLength={4} /></div>
             </div>
             <div className="g3" style={{ marginBottom:timeError?4:14 }}>
@@ -211,5 +224,8 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
       )}
       {showLogbookImport && <LogbookImportWizard aircraft={aircraft} onClose={()=>setShowLogbookImport(false)} onImported={()=>{setShowLogbookImport(false);reload();}} />}
     </div>
+      {fboAirport && (
+        <FBOModal airport={fboAirport} onClose={() => setFboAirport(null)} />
+      )}
   );
 }
