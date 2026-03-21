@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import AirportRegisterModal from './AirportRegisterModal';
 
-export default function AirportSearchInput({ value='', onChange, placeholder='ICAO ou nome do aerodromo', label, required=false, className='' }) {
+export default function AirportSearchInput({ value='', onChange, placeholder='ICAO ou nome do aeródromo', label, required=false, className='' }) {
   const [query, setQuery] = useState(value||'');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -65,8 +65,8 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
     if (onChange) onChange(airport.icao||'', airport);
   };
 
-  const typeIcon = (t) => t === 'heliponto' ? '[H]' : t === 'public' ? '[P]' : '[A]';
-  const typeLabel = (t) => t === 'heliponto' ? 'Heliponto' : t === 'public' ? 'Publico' : 'Privado';
+  const typeIcon = (t) => t === 'heliponto' ? '🚁' : t === 'public' ? '✈️' : '🛩️';
+  const typeLabel = (t) => t === 'heliponto' ? 'Heliponto' : t === 'public' ? 'Público' : 'Privado';
 
   return (
     <div ref={containerRef} className={['airport-search-wrapper', className].filter(Boolean).join(' ')} style={{ position: 'relative' }}>
@@ -85,7 +85,7 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
           autoComplete="off"
           className="airport-search-input"
         />
-        {loading && <span className="airport-search-spinner">...</span>}
+        {loading && <span className="airport-search-spinner">&#8987;</span>}
       </div>
       {open && (
         <div className="airport-search-dropdown">
@@ -101,15 +101,15 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
                 </button>
               ))}
               <button type="button" className="airport-search-not-found" onClick={() => { setOpen(false); setShowRegister(true); }}>
-                + Nao encontrou? Cadastrar novo aerodromo
+                + Não encontrou? Cadastrar novo aeródromo
               </button>
             </>
           ) : (
             !loading && (
               <div className="airport-search-empty">
-                <p>Nenhum aerodromo encontrado para <strong>{query}</strong></p>
+                <p>Nenhum aeródromo encontrado para <strong>{query}</strong></p>
                 <button type="button" className="airport-search-register-btn" onClick={() => { setOpen(false); setShowRegister(true); }}>
-                  + Cadastrar novo aerodromo
+                  + Cadastrar novo aeródromo
                 </button>
               </div>
             )
