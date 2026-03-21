@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabase';
 import AirportRegisterModal from './AirportRegisterModal';
 
 export default function AirportSearchInput({ value='', onChange, placeholder='ICAO ou nome do aeródromo', label, required=false, className='' }) {
@@ -85,7 +85,7 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
           autoComplete="off"
           className="airport-search-input"
         />
-        {loading && <span className="airport-search-spinner">&#8987;</span>}
+        {loading && <span className="airport-search-spinner">...</span>}
       </div>
       {open && (
         <div className="airport-search-dropdown">
