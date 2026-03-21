@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import AirportRegisterModal from './AirportRegisterModal';
 
-export default function AirportSearchInput({ value='', onChange, placeholder='ICAO ou nome do aeródromo', label, required=false, className='' }) {
+export default function AirportSearchInput({ value='', onChange, placeholder='ICAO ou nome do aerodromo', label, required=false, className='' }) {
   const [query, setQuery] = useState(value||'');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -57,15 +57,15 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
     onChange?.(airport.icao||'', airport);
   };
 
-  const typeIcon = (t) => t==='heliponto'?'🚁':t==='public'?'🛬':'✈️';
-  const typeLabel = (t) => t==='heliponto'?'Heliponto':t==='public'?'Público':'Privado';
+  const typeIcon = (t) => t==='heliponto' ? '[H]' : t==='public' ? '[P]' : '[A]';
+  const typeLabel = (t) => t==='heliponto' ? 'Heliponto' : t==='public' ? 'Publico' : 'Privado';
 
   return (
     <div ref={containerRef} className={`airport-search-wrapper ${className}`} style={{position:'relative'}}>
       {label && <label className="airport-search-label">{label}{required&&<span style={{color:'#ef4444'}}> *</span>}</label>}
       <div className="airport-search-input-row">
         <input type="text" value={query} onChange={handleInput} onFocus={()=>query.length>=2&&setOpen(true)} placeholder={placeholder} autoComplete="off" className="airport-search-input" />
-        {loading && <span className="airport-search-spinner">⏳</span>}
+        {loading && <span className="airport-search-spinner">...</span>}
       </div>
       {open && (
         <div className="airport-search-dropdown">
@@ -74,19 +74,19 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
               {results.map(a => (
                 <button key={a.id} type="button" className="airport-search-item" onClick={()=>handleSelect(a)}>
                   <span className="airport-search-item-icon">{typeIcon(a.type)}</span>
-                  <span className="airport-search-item-icao">{a.icao||'—'}</span>
+                  <span className="airport-search-item-icao">{a.icao||'---'}</span>
                   <span className="airport-search-item-name">{a.name}</span>
                   <span className="airport-search-item-city">{[a.city,a.state].filter(Boolean).join(' / ')}</span>
                   <span className="airport-search-item-type">{typeLabel(a.type)}</span>
                 </button>
               ))}
-              <button type="button" className="airport-search-not-found" onClick={()=>{setOpen(false);setShowRegister(true);}}>➕ Não encontrou? Cadastrar novo aeródromo</button>
+              <button type="button" className="airport-search-not-found" onClick={()=>{setOpen(false);setShowRegister(true);}}>+ Nao encontrou? Cadastrar novo aerodromo</button>
             </>
           ) : (
             !loading && (
               <div className="airport-search-empty">
-                <p>Nenhum aeródromo encontrado para <strong>"${query}"</strong></p>
-                <button type="button" className="airport-search-register-btn" onClick={()=>{setOpen(false);setShowRegister(true);}}>➕ Cadastrar novo aeródromo</button>
+                <p>Nenhum aerodromo encontrado para <strong>{query}</strong></p>
+                <button type="button" className="airport-search-register-btn" onClick={()=>{setOpen(false);setShowRegister(true);}}>+ Cadastrar novo aerodromo</button>
               </div>
             )
           )}
