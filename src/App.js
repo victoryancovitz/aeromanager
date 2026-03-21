@@ -145,6 +145,7 @@ export default function App() {
   const [showPOH, setShowPOH]   = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [globalAcFilter, setGlobalAcFilter] = useState('all'); // 'all' | aircraft.id
   const [showDocImport, setShowDocImport] = useState(false);
   const [showGD, setShowGD]     = useState(false);
@@ -478,7 +479,7 @@ export default function App() {
             ))}
           </div>
         )}
-        {user && user.email === 'victor_by@hotmail.com' && <SeedDataBanner onDone={reload} onStartOnboarding={() => setShowOnboarding(true)} />}
+        {user && user.email === 'victor_by@hotmail.com' && <SeedDataBanner onDone={reload} onStartOnboarding={() => setShowOnboarding(true)} onStartWizard={() => setShowWizard(true)} />}
         {dataLoading && (
           <div style={{ padding:'6px 24px', fontSize:11, color:'var(--text3)', borderBottom:`1px solid var(--border)` }}>
             Sincronizando...
@@ -568,7 +569,23 @@ export default function App() {
           />
         </React.Suspense>
       )}
-      {showOnboarding && (
+      {showWizard && (
+      <React.Suspense fallback={null}>
+        <OnboardingWizard
+          onClose={() => {
+            setShowWizard(false);
+            localStorage.setItem('am_wizard_done', '1');
+          }}
+          onComplete={() => {
+            setShowWizard(false);
+            localStorage.setItem('am_wizard_done', '1');
+            reload();
+            go('dashboard');
+          }}
+        />
+      </React.Suspense>
+    )}
+    {showOnboarding && (
         <React.Suspense fallback={null}>
           <AircraftOnboarding
             onClose={() => { setShowOnboarding(false); localStorage.setItem('am_onboarding_dismissed','1'); reload(); }}
