@@ -223,9 +223,9 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
         </div>
       )}
       {showLogbookImport && <LogbookImportWizard aircraft={aircraft} onClose={()=>setShowLogbookImport(false)} onImported={()=>{setShowLogbookImport(false);reload();}} />}
-    </div>
       {fboAirport && (
         <FBOModal airport={fboAirport} onClose={() => setFboAirport(null)} />
       )}
+    </div>
   );
 }
