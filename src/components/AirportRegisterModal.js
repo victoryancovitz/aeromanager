@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabase';
 
 const STATES=['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -15,22 +15,49 @@ export default function AirportRegisterModal({ initialName='', onClose, onSucces
     setSaving(true); setError('');
     try {
       const { data:{ user } } = await supabase.auth.getUser();
-      const payload = { user_id:user.id, icao:form.icao.toUpperCase()||null, name:form.name.trim(), city:form.city.trim()||null, state:form.state||null, lat:form.lat?parseFloat(form.lat):null, lng:form.lng?parseFloat(form.lng):null, type:form.type, notes:form.notes.trim()||null, status:'pending' };
+      const payload = {
+        user_id: user.id,
+        icao: form.icao.toUpperCase()||null,
+        name: form.name.trim(),
+        city: form.city.trim()||null,
+        state: form.state||null,
+        lat: form.lat ? parseFloat(form.lat) : null,
+        lng: form.lng ? parseFloat(form.lng) : null,
+        type: form.type,
+        notes: form.notes.trim()||null,
+        status: 'pending'
+      };
       const { error:reqErr } = await supabase.from('airport_requests').insert(payload);
       if (reqErr) throw reqErr;
       if (form.icao) {
-        const { data:inserted } = await supabase.from('airports_db').insert({ icao:form.icao.toUpperCase(), name:form.name.trim(), city:form.city.trim()||null, state:form.state||null, lat:form.lat?parseFloat(form.lat):null, lng:form.lng?parseFloat(form.lng):null, type:form.type, anac_category:form.type, source:'user', verified:false, notes:'Cadastrado pelo usuário — aguardando verificação' }).select().single();
+        const { data:inserted } = await supabase.from('airports_db').insert({
+          icao: form.icao.toUpperCase(),
+          name: form.name.trim(),
+          city: form.city.trim()||null,
+          state: form.state||null,
+          lat: form.lat ? parseFloat(form.lat) : null,
+          lng: form.lng ? parseFloat(form.lng) : null,
+          type: form.type,
+          anac_category: form.type,
+          source: 'user',
+          verified: false,
+          notes: 'Cadastrado pelo usuário – aguardando verificação'
+        }).select().single();
         if (inserted) { onSuccess?.(inserted); return; }
       }
-      onSuccess?.({ icao:form.icao.toUpperCase()||null, name:form.name.trim(), _pending:true });
-    } catch(err) { setError(err.message||'Erro ao cadastrar'); } finally { setSaving(false); }
+      onSuccess?.({ icao: form.icao.toUpperCase()||null, name: form.name.trim(), _pending: true });
+    } catch(err) {
+      setError(err.message||'Erro ao cadastrar');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal-box" style={{maxWidth:480}}>
         <div className="modal-header">
-          <h2>✈️ Cadastrar Novo Aeródromo</h2>
+          <h2>Cadastrar Novo Aeródromo</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit} className="modal-form">
@@ -51,19 +78,40 @@ export default function AirportRegisterModal({ initialName='', onClose, onSucces
               </select>
             </div>
           </div>
-          <div className="form-group"><label>Nome *</label><input type="text" value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Ex: Fazenda Santa Maria" required /></div>
-          <div className="form-row-2">
-            <div className="form-group"><label>Município</label><input type="text" value={form.city} onChange={e=>set('city',e.target.value)} placeholder="Ex: Campinas" /></div>
-            <div className="form-group"><label>UF</label><select value={form.state} onChange={e=>set('state',e.target.value)}><option value="">—</option>{STATES.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+          <div className="form-group">
+            <label>Nome *</label>
+            <input type="text" value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Nome do aeródromo" required />
           </div>
           <div className="form-row-2">
-            <div className="form-group"><label>Latitude</label><input type="number" step="any" value={form.lat} onChange={e=>set('lat',e.target.value)} placeholder="-23.0000" /></div>
-            <div className="form-group"><label>Longitude</label><input type="number" step="any" value={form.lng} onChange={e=>set('lng',e.target.value)} placeholder="-46.0000" /></div>
+            <div className="form-group">
+              <label>Cidade</label>
+              <input type="text" value={form.city} onChange={e=>set('city',e.target.value)} placeholder="Cidade" />
+            </div>
+            <div className="form-group">
+              <label>UF</label>
+              <select value={form.state} onChange={e=>set('state',e.target.value)}>
+                <option value="">--</option>
+                {STATES.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
           </div>
-          <div className="form-group"><label>Observações</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Informações adicionais..." /></div>
+          <div className="form-row-2">
+            <div className="form-group">
+              <label>Latitude</label>
+              <input type="number" step="any" value={form.lat} onChange={e=>set('lat',e.target.value)} placeholder="-23.4356" />
+            </div>
+            <div className="form-group">
+              <label>Longitude</label>
+              <input type="number" step="any" value={form.lng} onChange={e=>set('lng',e.target.value)} placeholder="-46.4731" />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Observações</label>
+            <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="Informações adicionais..." rows={2} />
+          </div>
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn-primary" disabled={saving}>{saving?'Cadastrando...':'✅ Cadastrar Aeródromo'}</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Salvando...' : 'Cadastrar'}</button>
           </div>
         </form>
       </div>
