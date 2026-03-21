@@ -60,8 +60,6 @@ export default function AirportSearchInput({ value='', onChange, placeholder='IC
   const handleSelect = (airport) => {
     setSelected(airport);
     setQuery(airport.icao || airport.name);
-    // Mostrar IATA se disponível
-    if (airport.iata) setQuery(airport.icao + (airport.iata ? ' / ' + airport.iata : ''));
     setOpen(false);
     setResults([]);
     if (onChange) onChange(airport.icao||'', airport);
