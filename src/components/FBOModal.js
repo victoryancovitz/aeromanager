@@ -20,8 +20,6 @@ export default function FBOModal({ airport, onClose }) {
   const [fbos, setFbos] = useState([]);
   const [fuel, setFuel] = useState([]);
   const [tab, setTab] = useState('info');
-  const [showFBO, setShowFBO] = useState(false);
-  const [showFuel, setShowFuel] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(()=>{ load(); },[airport.id]);
@@ -92,7 +90,6 @@ export default function FBOModal({ airport, onClose }) {
                       </div>
                     ))
                   )}
-                  <button className="btn-secondary" style={{marginTop:12}} onClick={()=>setShowFBO(true)}>+ Cadastrar FBO</button>
                 </div>
               )}
               {tab==='fuel' && (
@@ -114,7 +111,6 @@ export default function FBOModal({ airport, onClose }) {
                       </tbody>
                     </table>
                   )}
-                  <button className="btn-secondary" style={{marginTop:12}} onClick={()=>setShowFuel(true)}>+ Reportar preço</button>
                 </div>
               )}
             </>

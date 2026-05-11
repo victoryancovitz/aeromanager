@@ -46,6 +46,7 @@ const CreditLedger        = React.lazy(() => import('./components/CreditLedger')
 const DocumentImportWizard = React.lazy(() => import('./components/DocumentImportWizard'));
 const EmailTemplates       = React.lazy(() => import('./components/EmailTemplates'));
 const CustomAlerts         = React.lazy(() => import('./components/CustomAlerts'));
+const OnboardingWizard     = React.lazy(() => import('./components/OnboardingWizard'));
 
 const NAV = [
   // —— 1. GESTÃO DA AERONAVE —————————————————————————————————————————————————

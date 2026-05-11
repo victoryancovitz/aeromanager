@@ -1,6 +1,7 @@
 // Flights.js — v5.40
 import React, { useState } from 'react';
 import { saveFlight, deleteFlight } from '../store';
+import { supabase } from '../supabase';
 import { AcIcon } from './Instruments';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import IcaoInput from './IcaoInput';
@@ -107,7 +108,11 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
                   placeholder="SBGR"
                 />
                 {form.destinationIcao && form.destinationIcao.length >= 3 && (
-                  <button type="button" onClick={() => setFboAirport({ icao: form.destinationIcao, name: form.destinationIcao })}
+                  <button type="button" onClick={async () => {
+                    const icao = form.destinationIcao.toUpperCase();
+                    const { data } = await supabase.from('airports_db').select('id, icao, iata, name, city, state, type, lat, lng').eq('icao', icao).maybeSingle();
+                    setFboAirport(data || { icao, name: icao });
+                  }}
                     style={{ marginTop:4, fontSize:11, padding:'3px 10px', background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:6, cursor:'pointer', color:'var(--accent)', display:'flex', alignItems:'center', gap:4 }}>
                     ⛽ FBO &amp; Combustível
                   </button>
