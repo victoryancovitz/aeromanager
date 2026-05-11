@@ -7,6 +7,7 @@ import { useMultiSelect } from '../hooks/useMultiSelect';
 import IcaoInput from './IcaoInput';
 import FBOModal from './FBOModal';
 import LogbookImportWizard from './LogbookImportWizard';
+import FlightDocuments from './FlightDocuments';
 
 const EMPTY = {
   aircraftId:'', departureIcao:'', destinationIcao:'', alternateIcao:'',
@@ -178,7 +179,13 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
           </div>
 
           {editing && editing !== 'new' ? (
-            <FlightCrewSection flightId={editing} flightDate={form.date} aircraftId={form.aircraftId} crewNotes={form.crewNotes} onCrewNotesChange={v=>set('crewNotes',v)} />
+            <>
+              <FlightCrewSection flightId={editing} flightDate={form.date} aircraftId={form.aircraftId} crewNotes={form.crewNotes} onCrewNotesChange={v=>set('crewNotes',v)} />
+              <FlightDocuments
+                flight={{ id: editing, ...form }}
+                aircraft={aircraft.find(a => a.id === form.aircraftId) || null}
+              />
+            </>
           ) : (
             <div className="card" style={{ padding:'14px 20px', marginBottom:14 }}>
               <div className="section-title" style={{ marginBottom:6 }}>Tripulação deste voo</div>
