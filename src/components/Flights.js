@@ -20,8 +20,14 @@ const EMPTY = {
 
 const ROLE_LABEL = {
   pic: 'PIC (Comandante)', sic: 'SIC (Co-piloto)',
-  flight_attendant: 'Comissária(o)', mechanic: 'Mecânico', other: 'Outro',
+  flight_attendant: 'Comissária(o)', mechanic: 'Mecânico',
+  passenger: 'Passageiro', other: 'Outro',
 };
+
+function fmtMoney(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  return parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+}
 
 function calcBlockMins(out, inT, date) {
   if (!out || !inT) return 0;
@@ -276,13 +282,20 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
-  const [form, setForm] = useState({
+  const EMPTY_FC = {
     crew_member_id: '', name_adhoc: '', role: 'pic',
-    daily_rate_applied: '', per_diem_applied: '',
-    currency: 'BRL', days_count: 1, notes: '',
-  });
+    cost_mode: 'per_day',
+    flight_days: 1, ground_days: 0,
+    rate_flight_applied: '', rate_ground_applied: '',
+    per_diem_applied: '',
+    currency: 'BRL',
+    total_agreed_amount: '',
+    notes: '',
+  };
+  const [form, setForm] = useState(EMPTY_FC);
 
   async function load() {
     setLoading(true); setError('');
@@ -300,7 +313,7 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
   useEffect(() => { if (flightId) load(); }, [flightId]);
 
   function onSelectMember(id) {
-    if (!id) { setForm(f => ({...f, crew_member_id:'', daily_rate_applied:'', per_diem_applied:'', currency:'BRL'})); return; }
+    if (!id) { setForm(f => ({...f, crew_member_id:'', rate_flight_applied:'', rate_ground_applied:'', per_diem_applied:'', currency:'BRL'})); return; }
     const m = members.find(x => x.id === id);
     if (!m) return;
     // Sugere rates do tripulante. Default: BRL se houver, senão USD.
@@ -311,17 +324,29 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
       name_adhoc: '',
       role: m.role || 'pic',
       currency: useUsd ? 'USD' : 'BRL',
-      daily_rate_applied: useUsd ? (m.daily_rate_usd || '') : (m.daily_rate_brl || ''),
+      rate_flight_applied: useUsd ? (m.daily_rate_usd || '') : (m.daily_rate_brl || ''),
+      rate_ground_applied: useUsd ? (m.daily_rate_ground_usd || '') : (m.daily_rate_ground_brl || ''),
       per_diem_applied: useUsd ? (m.per_diem_international_usd || '') : (m.per_diem_domestic_brl || ''),
     }));
   }
 
+  function previewTotal(f) {
+    const fd = parseInt(f.flight_days || 0) || 0;
+    const gd = parseInt(f.ground_days || 0) || 0;
+    const rf = parseFloat(f.rate_flight_applied || 0) || 0;
+    const rg = parseFloat(f.rate_ground_applied || 0) || 0;
+    const pd = parseFloat(f.per_diem_applied || 0) || 0;
+    const ag = parseFloat(f.total_agreed_amount || 0) || 0;
+    const totalDays = fd + gd;
+    const base = f.cost_mode === 'total_agreed' ? ag : (rf * fd + rg * gd);
+    return Math.round((base + pd * totalDays) * 100) / 100;
+  }
+
   async function addCrew(e) {
     e.preventDefault();
-    setError('');
+    setError(''); setInfo('');
     if (!form.crew_member_id && !form.name_adhoc.trim()) {
-      setError('Selecione um tripulante ou informe um nome ad-hoc.');
-      return;
+      setError('Selecione um tripulante ou informe um nome ad-hoc.'); return;
     }
     try {
       await saveFlightCrewMember({
@@ -329,13 +354,17 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
         crew_member_id: form.crew_member_id || null,
         name_adhoc: form.crew_member_id ? null : form.name_adhoc.trim(),
         role: form.role,
-        daily_rate_applied: form.daily_rate_applied !== '' ? parseFloat(form.daily_rate_applied) : null,
+        cost_mode: form.cost_mode,
+        flight_days: parseInt(form.flight_days) || 0,
+        ground_days: parseInt(form.ground_days) || 0,
+        rate_flight_applied: form.cost_mode === 'per_day' && form.rate_flight_applied !== '' ? parseFloat(form.rate_flight_applied) : null,
+        rate_ground_applied: form.cost_mode === 'per_day' && form.rate_ground_applied !== '' ? parseFloat(form.rate_ground_applied) : null,
         per_diem_applied: form.per_diem_applied !== '' ? parseFloat(form.per_diem_applied) : null,
+        total_agreed_amount: form.cost_mode === 'total_agreed' && form.total_agreed_amount !== '' ? parseFloat(form.total_agreed_amount) : null,
         currency: form.currency || 'BRL',
-        days_count: parseFloat(form.days_count) || 1,
         notes: form.notes.trim() || null,
       });
-      setForm({ crew_member_id:'', name_adhoc:'', role:'pic', daily_rate_applied:'', per_diem_applied:'', currency:'BRL', days_count:1, notes:'' });
+      setForm(EMPTY_FC);
       setShowAdd(false);
       await load();
     } catch(err) { setError(err.message); }
@@ -343,26 +372,29 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
 
   async function removeCrew(id) {
     if (!window.confirm('Remover este tripulante do voo?')) return;
-    setError('');
+    setError(''); setInfo('');
     try { await deleteFlightCrewMember(id); await load(); }
     catch(err) { setError(err.message); }
   }
 
   async function generateCosts() {
     if (!window.confirm('Gerar lançamentos de custo em Custos? Lançamentos auto-gerados anteriores deste voo serão substituídos.')) return;
-    setGenBusy(true); setError('');
+    setGenBusy(true); setError(''); setInfo('');
     try {
       const n = await generateCrewCostsForFlight({ flightId, aircraftId, flightDate });
-      alert(`✓ ${n} lançamento(s) de custo criado(s) na categoria 'crew'.`);
+      setInfo(`✓ ${n} lançamento(s) de custo criado(s) na categoria 'crew'.`);
     } catch(err) { setError(err.message); }
     setGenBusy(false);
   }
 
   const totalBRL = crewList.reduce((s, c) => {
-    const cost = parseFloat(c.total_crew_cost || 0);
+    const cost = parseFloat(c.total_cost || 0);
     const fx = c.currency === 'USD' ? 5.0 : 1.0;
     return s + cost * fx;
   }, 0);
+
+  const isAgreed = form.cost_mode === 'total_agreed';
+  const tPreview = previewTotal(form);
 
   return (
     <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
@@ -388,6 +420,9 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
       {error && (
         <div style={{ padding:'8px 12px', marginBottom:10, background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.3)', borderRadius:6, color:'var(--red)', fontSize:12 }}>{error}</div>
       )}
+      {info && (
+        <div style={{ padding:'8px 12px', marginBottom:10, background:'rgba(16,185,129,.08)', border:'1px solid rgba(16,185,129,.3)', borderRadius:6, color:'var(--green)', fontSize:12 }}>{info}</div>
+      )}
 
       {loading ? (
         <div style={{ color:'var(--text3)', fontSize:12, padding:'10px 0' }}>Carregando…</div>
@@ -399,25 +434,33 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom: showAdd ? 12 : 0 }}>
           <thead>
             <tr style={{ background:'var(--bg2)' }}>
-              {['Nome','Função','Diária','Per diem','Moeda','Dias','Total','Notas',''].map(h => (
-                <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</th>
+              {['Nome','Função','Modo','D.voo','D.solo','Rate voo','Rate solo','Per diem','Combinado','Moeda','Total','Notas',''].map(h => (
+                <th key={h} style={{ padding:'7px 8px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {crewList.map(c => (
               <tr key={c.id} style={{ borderBottom:'1px solid var(--border)' }}>
-                <td style={{ padding:'8px 10px', fontWeight:500 }}>{c.crew_member?.full_name || c.name_adhoc || '—'}</td>
-                <td style={{ padding:'8px 10px' }}><span className="tag tag-mono">{ROLE_LABEL[c.role] || c.role}</span></td>
-                <td style={{ padding:'8px 10px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{c.daily_rate_applied != null ? parseFloat(c.daily_rate_applied).toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—'}</td>
-                <td style={{ padding:'8px 10px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{c.per_diem_applied != null ? parseFloat(c.per_diem_applied).toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—'}</td>
-                <td style={{ padding:'8px 10px', textAlign:'center' }}>{c.currency || 'BRL'}</td>
-                <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)' }}>{parseFloat(c.days_count||1)}</td>
-                <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)', color:'var(--blue)', fontWeight:600 }}>
-                  {c.currency==='USD'?'$':'R$'} {parseFloat(c.total_crew_cost||0).toLocaleString('pt-BR',{maximumFractionDigits:0})}
+                <td style={{ padding:'8px 8px', fontWeight:500 }}>{c.crew_member?.full_name || c.name_adhoc || '—'}</td>
+                <td style={{ padding:'8px 8px' }}><span className="tag tag-mono">{ROLE_LABEL[c.role] || c.role}</span></td>
+                <td style={{ padding:'8px 8px' }}>
+                  <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:'var(--bg1)', color: c.cost_mode==='total_agreed'?'var(--purple)':'var(--blue)', fontWeight:600 }}>
+                    {c.cost_mode==='total_agreed' ? 'Combinado' : 'Por dia'}
+                  </span>
                 </td>
-                <td style={{ padding:'8px 10px', color:'var(--text3)', fontSize:11, maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.notes || '—'}</td>
-                <td style={{ padding:'8px 10px', textAlign:'right' }}>
+                <td style={{ padding:'8px 8px', textAlign:'right', fontFamily:'var(--font-mono)' }}>{c.flight_days ?? '—'}</td>
+                <td style={{ padding:'8px 8px', textAlign:'right', fontFamily:'var(--font-mono)' }}>{c.ground_days ?? '—'}</td>
+                <td style={{ padding:'8px 8px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{fmtMoney(c.rate_flight_applied)}</td>
+                <td style={{ padding:'8px 8px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{fmtMoney(c.rate_ground_applied)}</td>
+                <td style={{ padding:'8px 8px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{fmtMoney(c.per_diem_applied)}</td>
+                <td style={{ padding:'8px 8px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{fmtMoney(c.total_agreed_amount)}</td>
+                <td style={{ padding:'8px 8px', textAlign:'center' }}>{c.currency || 'BRL'}</td>
+                <td style={{ padding:'8px 8px', textAlign:'right', fontFamily:'var(--font-mono)', color:'var(--blue)', fontWeight:600 }}>
+                  {c.currency==='USD'?'$':'R$'} {parseFloat(c.total_cost||0).toLocaleString('pt-BR',{maximumFractionDigits:0})}
+                </td>
+                <td style={{ padding:'8px 8px', color:'var(--text3)', fontSize:11, maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.notes || '—'}</td>
+                <td style={{ padding:'8px 8px', textAlign:'right' }}>
                   <button type="button" className="danger" onClick={() => removeCrew(c.id)} style={{ fontSize:10, padding:'3px 8px' }}>✕</button>
                 </td>
               </tr>
@@ -443,21 +486,54 @@ function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrew
               </select>
             </div>
           </div>
-          <div className="g4" style={{ marginBottom:10 }}>
-            <div><label>Diária (rate)</label><input type="number" step="0.01" value={form.daily_rate_applied} onChange={e=>setForm(f=>({...f, daily_rate_applied:e.target.value}))} placeholder="0.00" /></div>
-            <div><label>Per diem</label><input type="number" step="0.01" value={form.per_diem_applied} onChange={e=>setForm(f=>({...f, per_diem_applied:e.target.value}))} placeholder="0.00" /></div>
+
+          <div className="g3" style={{ marginBottom:10 }}>
+            <div><label>Modo de cobrança</label>
+              <select value={form.cost_mode} onChange={e=>setForm(f=>({...f, cost_mode:e.target.value}))}>
+                <option value="per_day">Por dia (rate × dias)</option>
+                <option value="total_agreed">Valor combinado (total fechado)</option>
+              </select>
+            </div>
             <div><label>Moeda</label>
               <select value={form.currency} onChange={e=>setForm(f=>({...f, currency:e.target.value}))}>
                 <option value="BRL">BRL (R$)</option>
                 <option value="USD">USD ($)</option>
               </select>
             </div>
-            <div><label>Dias</label><input type="number" step="0.5" min="0.5" value={form.days_count} onChange={e=>setForm(f=>({...f, days_count:e.target.value}))} /></div>
+            <div style={{ alignSelf:'end', textAlign:'right' }}>
+              <div style={{ fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.06em' }}>Total estimado</div>
+              <div style={{ fontSize:16, fontWeight:700, color:'var(--blue)', fontFamily:'var(--font-mono)' }}>
+                {form.currency==='USD'?'$':'R$'} {tPreview.toLocaleString('pt-BR',{maximumFractionDigits:0})}
+              </div>
+            </div>
           </div>
+
+          <div className="g4" style={{ marginBottom:10 }}>
+            <div><label>Dias de voo</label><input type="number" min="0" step="1" value={form.flight_days} onChange={e=>setForm(f=>({...f, flight_days:e.target.value}))} /></div>
+            <div><label>Dias em solo</label><input type="number" min="0" step="1" value={form.ground_days} onChange={e=>setForm(f=>({...f, ground_days:e.target.value}))} /></div>
+            <div><label>Per diem (por dia)</label><input type="number" step="0.01" value={form.per_diem_applied} onChange={e=>setForm(f=>({...f, per_diem_applied:e.target.value}))} placeholder="0.00" /></div>
+            <div style={{ alignSelf:'end', fontSize:11, color:'var(--text3)' }}>
+              {form.flight_days || 0}+{form.ground_days || 0} = <strong style={{ color:'var(--text2)' }}>{(parseInt(form.flight_days||0)||0)+(parseInt(form.ground_days||0)||0)}d</strong>
+            </div>
+          </div>
+
+          {!isAgreed ? (
+            <div className="g3" style={{ marginBottom:10 }}>
+              <div><label>Rate diário voo</label><input type="number" step="0.01" value={form.rate_flight_applied} onChange={e=>setForm(f=>({...f, rate_flight_applied:e.target.value}))} placeholder="0.00" /></div>
+              <div><label>Rate diário solo</label><input type="number" step="0.01" value={form.rate_ground_applied} onChange={e=>setForm(f=>({...f, rate_ground_applied:e.target.value}))} placeholder="0.00" /></div>
+              <div></div>
+            </div>
+          ) : (
+            <div className="g3" style={{ marginBottom:10 }}>
+              <div style={{ gridColumn:'1/3' }}><label>Valor combinado (total fechado, sem per diem)</label><input type="number" step="0.01" value={form.total_agreed_amount} onChange={e=>setForm(f=>({...f, total_agreed_amount:e.target.value}))} placeholder="0.00" /></div>
+              <div style={{ alignSelf:'end', fontSize:10, color:'var(--text3)' }}>Per diem é somado por cima.</div>
+            </div>
+          )}
+
           <div style={{ marginBottom:10 }}><label>Notas</label><input value={form.notes} onChange={e=>setForm(f=>({...f, notes:e.target.value}))} placeholder="ex: hotel + transfer incluso" /></div>
           <div style={{ display:'flex', gap:8 }}>
             <button type="submit" className="primary" style={{ fontSize:12 }}>Adicionar</button>
-            <button type="button" onClick={() => { setShowAdd(false); setError(''); }} style={{ fontSize:12 }}>Cancelar</button>
+            <button type="button" onClick={() => { setShowAdd(false); setError(''); setForm(EMPTY_FC); }} style={{ fontSize:12 }}>Cancelar</button>
           </div>
         </form>
       )}

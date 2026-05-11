@@ -1157,7 +1157,19 @@ export async function getFlightCrew(flightId) {
 export async function saveFlightCrewMember(fc) {
   const user = await getUser();
   if (!user) throw new Error('Não autenticado');
-  const totalCrewCost = computeTotalCrewCost(fc);
+  const flightDays = parseInt(fc.flight_days ?? 1) || 0;
+  const groundDays = parseInt(fc.ground_days ?? 0) || 0;
+  const costMode = fc.cost_mode === 'total_agreed' ? 'total_agreed' : 'per_day';
+  const rateFlight = fc.rate_flight_applied !== '' && fc.rate_flight_applied != null ? parseFloat(fc.rate_flight_applied) : null;
+  const rateGround = fc.rate_ground_applied !== '' && fc.rate_ground_applied != null ? parseFloat(fc.rate_ground_applied) : null;
+  const perDiem    = fc.per_diem_applied    !== '' && fc.per_diem_applied    != null ? parseFloat(fc.per_diem_applied)    : null;
+  const agreed     = fc.total_agreed_amount !== '' && fc.total_agreed_amount != null ? parseFloat(fc.total_agreed_amount) : null;
+  const totalCost = computeFlightCrewTotal({
+    cost_mode: costMode,
+    flight_days: flightDays, ground_days: groundDays,
+    rate_flight_applied: rateFlight, rate_ground_applied: rateGround,
+    per_diem_applied: perDiem, total_agreed_amount: agreed,
+  });
   const row = {
     flight_id: fc.flight_id || fc.flightId,
     crew_member_id: fc.crew_member_id || fc.crewMemberId || null,
@@ -1168,13 +1180,15 @@ export async function saveFlightCrewMember(fc) {
     takeoff_time: fc.takeoff_time || null,
     landing_time: fc.landing_time || null,
     block_in: fc.block_in || null,
-    flight_time_minutes: fc.flight_time_minutes != null ? parseInt(fc.flight_time_minutes) : null,
-    block_time_minutes: fc.block_time_minutes != null ? parseInt(fc.block_time_minutes) : null,
-    daily_rate_applied: fc.daily_rate_applied != null ? parseFloat(fc.daily_rate_applied) : null,
-    per_diem_applied: fc.per_diem_applied != null ? parseFloat(fc.per_diem_applied) : null,
+    cost_mode: costMode,
+    flight_days: flightDays,
+    ground_days: groundDays,
+    rate_flight_applied: rateFlight,
+    rate_ground_applied: rateGround,
+    per_diem_applied: perDiem,
     currency: fc.currency || 'BRL',
-    days_count: fc.days_count != null ? parseFloat(fc.days_count) : 1,
-    total_crew_cost: totalCrewCost,
+    total_agreed_amount: agreed,
+    total_cost: totalCost,
     notes: fc.notes || null,
   };
   if (fc.id) {
@@ -1193,11 +1207,18 @@ export async function deleteFlightCrewMember(id) {
   if (error) throw error;
 }
 
-function computeTotalCrewCost(fc) {
-  const rate = parseFloat(fc.daily_rate_applied || fc.dailyRateApplied || 0) || 0;
-  const perDiem = parseFloat(fc.per_diem_applied || fc.perDiemApplied || 0) || 0;
-  const days = parseFloat(fc.days_count || fc.daysCount || 1) || 1;
-  return Math.round(((rate + perDiem) * days) * 100) / 100;
+// total_cost = (per_day)  rate_flight*flight_days + rate_ground*ground_days + per_diem*(flight+ground)
+//              (agreed)   total_agreed_amount                              + per_diem*(flight+ground)
+export function computeFlightCrewTotal(fc) {
+  const fd = parseInt(fc.flight_days ?? 0) || 0;
+  const gd = parseInt(fc.ground_days ?? 0) || 0;
+  const rf = parseFloat(fc.rate_flight_applied || 0) || 0;
+  const rg = parseFloat(fc.rate_ground_applied || 0) || 0;
+  const pd = parseFloat(fc.per_diem_applied || 0) || 0;
+  const ag = parseFloat(fc.total_agreed_amount || 0) || 0;
+  const totalDays = fd + gd;
+  const base = fc.cost_mode === 'total_agreed' ? ag : (rf * fd + rg * gd);
+  return Math.round((base + pd * totalDays) * 100) / 100;
 }
 
 // Gera lançamentos em costs para cada tripulante do voo. Retorna número de rows criadas.
@@ -1213,27 +1234,50 @@ export async function generateCrewCostsForFlight({ flightId, aircraftId, flightD
   const costs = [];
   for (const fc of crewRows) {
     const name = fc.crew_member?.full_name || fc.name_adhoc || 'Tripulante';
-    const role = fc.role || 'crew';
+    const role = (fc.role || 'crew').toUpperCase();
     const cur = fc.currency || 'BRL';
-    const days = parseFloat(fc.days_count || 1) || 1;
-    const rate = parseFloat(fc.daily_rate_applied || 0) || 0;
-    const perDiem = parseFloat(fc.per_diem_applied || 0) || 0;
     const fx = cur === 'USD' ? (parseFloat(fxUsdBrl) || 5.0) : 1.0;
-    if (rate > 0) {
+    const fd = parseInt(fc.flight_days || 0) || 0;
+    const gd = parseInt(fc.ground_days || 0) || 0;
+    const rf = parseFloat(fc.rate_flight_applied || 0) || 0;
+    const rg = parseFloat(fc.rate_ground_applied || 0) || 0;
+    const pd = parseFloat(fc.per_diem_applied || 0) || 0;
+    const ag = parseFloat(fc.total_agreed_amount || 0) || 0;
+    if (fc.cost_mode === 'total_agreed' && ag > 0) {
       costs.push({
         user_id: user.id, aircraft_id: aircraftId, flight_id: flightId, category: 'crew',
         cost_type: 'variable',
-        amount_brl: Math.round(rate * days * fx * 100) / 100,
-        description: `auto: Diária ${role.toUpperCase()} ${name} (${cur} ${rate} × ${days}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
+        amount_brl: Math.round(ag * fx * 100) / 100,
+        description: `auto: Valor combinado ${role} ${name} (${cur} ${ag.toLocaleString('en-US',{maximumFractionDigits:2})}${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
         reference_date: flightDate, vendor: name, recurrence: 'once',
       });
+    } else {
+      if (rf > 0 && fd > 0) {
+        costs.push({
+          user_id: user.id, aircraft_id: aircraftId, flight_id: flightId, category: 'crew',
+          cost_type: 'variable',
+          amount_brl: Math.round(rf * fd * fx * 100) / 100,
+          description: `auto: Diária voo ${role} ${name} (${cur} ${rf} × ${fd}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
+          reference_date: flightDate, vendor: name, recurrence: 'once',
+        });
+      }
+      if (rg > 0 && gd > 0) {
+        costs.push({
+          user_id: user.id, aircraft_id: aircraftId, flight_id: flightId, category: 'crew',
+          cost_type: 'variable',
+          amount_brl: Math.round(rg * gd * fx * 100) / 100,
+          description: `auto: Diária solo ${role} ${name} (${cur} ${rg} × ${gd}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
+          reference_date: flightDate, vendor: name, recurrence: 'once',
+        });
+      }
     }
-    if (perDiem > 0) {
+    const totalDays = fd + gd;
+    if (pd > 0 && totalDays > 0) {
       costs.push({
         user_id: user.id, aircraft_id: aircraftId, flight_id: flightId, category: 'crew',
         cost_type: 'variable',
-        amount_brl: Math.round(perDiem * days * fx * 100) / 100,
-        description: `auto: Per diem ${role.toUpperCase()} ${name} (${cur} ${perDiem} × ${days}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
+        amount_brl: Math.round(pd * totalDays * fx * 100) / 100,
+        description: `auto: Per diem ${role} ${name} (${cur} ${pd} × ${totalDays}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
         reference_date: flightDate, vendor: name, recurrence: 'once',
       });
     }
