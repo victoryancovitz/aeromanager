@@ -11,7 +11,7 @@ import DBEModule from './DBEModule';
 const EMPTY = {
   registration:'', type:'single_engine', manufacturer:'', model:'',
   year:new Date().getFullYear(),
-  engineModel:'', engineTboHours:'',
+  engineModel:'', engineTboHours:'', numEngines: 1,
   propModel:'', propTboHours:'', propTboYears:'', propSerial:'', propTso:'',
   apuModel:'', apuTboHours:'', apuTotalHours:'', apuCycles:'',
   baseAirframeHours:'', totalEngineHours:'', totalCycles:0,
@@ -345,7 +345,10 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
       )}
 
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid #1e2230' }}>
-        {TABS.map(t => (
+        {TABS.filter(t => {
+          if (t.id === 'propeller') return form.type !== 'jet' && form.type !== 'turboprop';
+          return true;
+        }).map(t => (
           <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:'8px 16px', border:'none', background:'transparent', color:tab===t.id?'#4a9eff':'#5a6080', fontWeight:tab===t.id?600:400, fontSize:12, cursor:'pointer', borderBottom:tab===t.id?'2px solid #4a9eff':'2px solid transparent', borderRadius:0 }}>
             {t.label}
           </button>
@@ -408,6 +411,17 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
             <div className="g3" style={{ marginBottom:14 }}>
               <div style={{ gridColumn:'1/3' }}><label>Modelo do motor</label><input value={form.engineModel||''} onChange={e=>set('engineModel',e.target.value)} placeholder="Lycoming IO-360-L2A" /></div>
               <div><label>TBO motor (h)</label><input type="number" value={form.engineTboHours||''} onChange={e=>set('engineTboHours',e.target.value)} placeholder="2000" /></div>
+            </div>
+            <div className="g3" style={{ marginBottom:14 }}>
+              <div>
+                <label>Número de Motores</label>
+                <select value={form.numEngines || 1} onChange={e => set('numEngines', parseInt(e.target.value))}>
+                  <option value={1}>1 motor</option>
+                  <option value={2}>2 motores</option>
+                  <option value={3}>3 motores</option>
+                  <option value={4}>4 motores</option>
+                </select>
+              </div>
             </div>
             <div className="g3" style={{ marginBottom:14 }}>
               <div><label>Combustível</label>
