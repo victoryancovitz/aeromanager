@@ -50,6 +50,7 @@ const OnboardingWizard     = React.lazy(() => import('./components/OnboardingWiz
 const Budgets              = React.lazy(() => import('./components/Budgets'));
 const CompanyBranding      = React.lazy(() => import('./components/CompanyBranding'));
 const CrewManager          = React.lazy(() => import('./components/CrewManager'));
+const AccountsManager      = React.lazy(() => import('./components/AccountsManager'));
 
 const NAV = [
   // —— 1. GESTÃO DA AERONAVE —————————————————————————————————————————————————
@@ -88,6 +89,7 @@ const NAV = [
   { id:'email_templates', label:'Templates de E-mail',    icon:'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z' },
   { id:'custom_alerts',   label:'Alertas Personalizados', icon:'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z' },
   { id:'crew',         label:'Tripulação & Docs',      icon:'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
+  { id:'accounts',     label:'Contas Financeiras',     icon:'M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z' },
   { id:'costcategories', advanced: true, label:'Categorias de Custo',  icon:'M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z' },
   { id:'pricing', advanced: true,      label:'Precificação',           icon:'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z' },
   { id:'benchmark', advanced: true,    label:'Benchmark Conklin',      icon:'M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z' },
@@ -542,6 +544,7 @@ export default function App() {
           {page==='budgets'       && <Budgets aircraft={filteredAircraft} reload={reload} setPage={go} />}
           {page==='company_branding' && <CompanyBranding onClose={() => go('budgets')} />}
           {page==='crew_manager'  && <CrewManager />}
+          {page==='accounts'      && <AccountsManager />}
           {page==='flightcosts'   && <Costs costs={filteredCosts} aircraft={filteredAircraft} flights={filteredFlights} reload={reload} preselFlight={preselFlight} onScanReceipt={() => setShowReceipt(true)} initialFilter="flight" />}
           {page==='maintenance'   && <Maintenance maintenance={filteredMaint} aircraft={filteredAircraft} reload={reload} />}
           {page==='mxtimeline'    && <Maintenance maintenance={filteredMaint} aircraft={filteredAircraft} flights={filteredFlights} reload={reload} initialTab="timeline" />}
