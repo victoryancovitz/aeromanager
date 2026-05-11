@@ -1132,3 +1132,193 @@ export async function removeComponent(id, cellHours, reason) {
 }
 
 // ── Aircraft Components (motores, hélices) ─────────────────────────────────────
+
+// ── BUDGETS / ORÇAMENTO ──────────────────────────────────────────────────────
+const fromBudget = r => ({
+  id: r.id, userId: r.user_id, aircraftId: r.aircraft_id,
+  name: r.name, fiscalYear: r.fiscal_year, status: r.status,
+  currency: r.currency, fxUsdBrl: parseFloat(r.fx_usd_brl)||0,
+  fuelUsdGal: parseFloat(r.fuel_usd_gal)||0,
+  contingencyPct: parseFloat(r.contingency_pct)||0,
+  hoursYearAssumed: parseFloat(r.hours_year_assumed)||0,
+  flightsYearAssumed: parseInt(r.flights_year_assumed)||0,
+  overnightsYearAssumed: parseInt(r.overnights_year_assumed)||0,
+  seasonality: r.seasonality||{}, notes: r.notes,
+  createdAt: r.created_at, updatedAt: r.updated_at,
+});
+const fromLine = r => ({
+  id: r.id, budgetId: r.budget_id, category: r.category,
+  description: r.description, vendor: r.vendor,
+  costType: r.cost_type, unit: r.unit,
+  unitAmountBrl: parseFloat(r.unit_amount_brl)||0,
+  annualQtyAssumed: parseFloat(r.annual_qty_assumed)||0,
+  recurrence: r.recurrence, isActive: r.is_active,
+  sortOrder: r.sort_order, notes: r.notes,
+});
+
+export async function getBudgets(aircraftId) {
+  const user = await getUser();
+  if (!user) return [];
+  let q = supabase.from('budgets').select('*').eq('user_id', user.id).order('fiscal_year', { ascending: false });
+  if (aircraftId) q = q.eq('aircraft_id', aircraftId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data||[]).map(fromBudget);
+}
+
+export async function getBudget(id) {
+  const { data, error } = await supabase.from('budgets').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? fromBudget(data) : null;
+}
+
+export async function saveBudget(b) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const row = {
+    user_id: user.id, aircraft_id: b.aircraftId,
+    name: b.name, fiscal_year: b.fiscalYear, status: b.status||'active',
+    fx_usd_brl: b.fxUsdBrl, fuel_usd_gal: b.fuelUsdGal,
+    contingency_pct: b.contingencyPct,
+    hours_year_assumed: b.hoursYearAssumed,
+    flights_year_assumed: b.flightsYearAssumed,
+    overnights_year_assumed: b.overnightsYearAssumed,
+    seasonality: b.seasonality||{}, notes: b.notes||null,
+    updated_at: new Date().toISOString(),
+  };
+  if (b.id) {
+    const { data, error } = await supabase.from('budgets').update(row).eq('id', b.id).select().single();
+    if (error) throw error;
+    return fromBudget(data);
+  } else {
+    const { data, error } = await supabase.from('budgets').insert(row).select().single();
+    if (error) throw error;
+    return fromBudget(data);
+  }
+}
+
+export async function deleteBudget(id) {
+  const { error } = await supabase.from('budgets').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function getBudgetLines(budgetId) {
+  const { data, error } = await supabase.from('budget_lines').select('*').eq('budget_id', budgetId).order('cost_type').order('sort_order').order('category');
+  if (error) throw error;
+  return (data||[]).map(fromLine);
+}
+
+export async function saveBudgetLine(l) {
+  const row = {
+    budget_id: l.budgetId, category: l.category,
+    description: l.description||null, vendor: l.vendor||null,
+    cost_type: l.costType, unit: l.unit,
+    unit_amount_brl: l.unitAmountBrl||0,
+    annual_qty_assumed: l.annualQtyAssumed||null,
+    recurrence: l.recurrence||null,
+    is_active: l.isActive!==false,
+    sort_order: l.sortOrder||0,
+    notes: l.notes||null,
+    updated_at: new Date().toISOString(),
+  };
+  if (l.id) {
+    const { data, error } = await supabase.from('budget_lines').update(row).eq('id', l.id).select().single();
+    if (error) throw error;
+    return fromLine(data);
+  } else {
+    const { data, error } = await supabase.from('budget_lines').insert(row).select().single();
+    if (error) throw error;
+    return fromLine(data);
+  }
+}
+
+export async function deleteBudgetLine(id) {
+  const { error } = await supabase.from('budget_lines').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function getBudgetMonthly(budgetId) {
+  const { data, error } = await supabase.from('budget_monthly').select('*').eq('budget_id', budgetId);
+  if (error) throw error;
+  return data || [];
+}
+
+// Regenera budget_monthly a partir das linhas (distribui anual /12, mensal ×1, variável anual_qty/12)
+export async function regenerateBudgetMonthly(budgetId) {
+  const b = await getBudget(budgetId);
+  if (!b) throw new Error('Orçamento não encontrado');
+  const lines = await getBudgetLines(budgetId);
+  const seas = b.seasonality || {};
+  // Limpa monthly existente
+  await supabase.from('budget_monthly').delete().eq('budget_id', budgetId);
+  const rows = [];
+  for (const l of lines) {
+    if (!l.isActive) continue;
+    for (let m = 1; m <= 12; m++) {
+      const factor = parseFloat(seas[m]) || 1.0;
+      let planned = 0;
+      if (l.unit === 'annual') planned = l.unitAmountBrl / 12;
+      else if (l.unit === 'monthly') planned = l.unitAmountBrl;
+      else planned = l.unitAmountBrl * (l.annualQtyAssumed/12) * factor;
+      rows.push({ budget_id: budgetId, line_id: l.id, month: m, planned_brl: Math.round(planned*100)/100 });
+    }
+  }
+  if (rows.length > 0) {
+    const { error } = await supabase.from('budget_monthly').insert(rows);
+    if (error) throw error;
+  }
+  return rows.length;
+}
+
+// Followup: planejado vs realizado por mês e categoria
+export async function getBudgetFollowup(budgetId) {
+  const b = await getBudget(budgetId);
+  if (!b) return null;
+  const lines = await getBudgetLines(budgetId);
+  const monthly = await getBudgetMonthly(budgetId);
+  // Realizado: agregação dos costs reais por mês × categoria, no fiscal_year, para a aeronave do budget
+  let actualsByMonthCat = {};
+  if (b.aircraftId) {
+    const start = `${b.fiscalYear}-01-01`;
+    const end = `${b.fiscalYear}-12-31`;
+    const { data: actuals, error } = await supabase
+      .from('costs')
+      .select('category, amount_brl, reference_date')
+      .eq('aircraft_id', b.aircraftId)
+      .gte('reference_date', start)
+      .lte('reference_date', end);
+    if (error) throw error;
+    for (const c of (actuals||[])) {
+      const m = parseInt(c.reference_date?.slice(5,7));
+      if (!m) continue;
+      const key = `${m}|${c.category}`;
+      actualsByMonthCat[key] = (actualsByMonthCat[key]||0) + parseFloat(c.amount_brl||0);
+    }
+  }
+  // Agrupar planejado por mês × categoria
+  const linesById = Object.fromEntries(lines.map(l => [l.id, l]));
+  const plannedByMonthCat = {};
+  for (const bm of monthly) {
+    const l = linesById[bm.line_id];
+    if (!l) continue;
+    const key = `${bm.month}|${l.category}`;
+    plannedByMonthCat[key] = (plannedByMonthCat[key]||0) + parseFloat(bm.planned_brl||0);
+  }
+  // Construir tabela: categorias únicas × 12 meses
+  const categories = [...new Set(lines.map(l => l.category))].sort();
+  const table = categories.map(cat => {
+    const row = { category: cat, months: [], plannedTotal: 0, actualTotal: 0 };
+    for (let m = 1; m <= 12; m++) {
+      const p = plannedByMonthCat[`${m}|${cat}`] || 0;
+      const a = actualsByMonthCat[`${m}|${cat}`] || 0;
+      row.months.push({ month: m, planned: p, actual: a, variance: a - p, pct: p > 0 ? ((a/p - 1)*100) : null });
+      row.plannedTotal += p;
+      row.actualTotal += a;
+    }
+    row.varianceTotal = row.actualTotal - row.plannedTotal;
+    row.pctTotal = row.plannedTotal > 0 ? ((row.actualTotal/row.plannedTotal - 1)*100) : null;
+    return row;
+  });
+  return { budget: b, categories, table };
+}
+
