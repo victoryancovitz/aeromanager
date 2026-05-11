@@ -3,7 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   getBudgets, saveBudget, deleteBudget,
   getBudgetLines, saveBudgetLine, deleteBudgetLine,
-  regenerateBudgetMonthly, getBudgetFollowup,
+  regenerateBudgetMonthly, getBudgetFollowup, cloneBudget,
+  runBudgetSnapshot, getBudgetSnapshots,
 } from '../store';
 
 const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -136,9 +137,21 @@ export default function Budgets({ aircraft = [], reload }) {
                   <div><div style={{ color:'var(--text3)' }}>Voos/ano</div><div style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{b.flightsYearAssumed}</div></div>
                   <div><div style={{ color:'var(--text3)' }}>Pernoites/ano</div><div style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{b.overnightsYearAssumed}</div></div>
                 </div>
-                <div style={{ display:'flex', gap:6, marginTop:14, borderTop:'1px solid var(--border)', paddingTop:12 }}>
+                <div style={{ display:'flex', gap:6, marginTop:14, borderTop:'1px solid var(--border)', paddingTop:12, flexWrap:'wrap' }}>
                   <button onClick={() => startFollowup(b.id)} className="primary" style={{ fontSize:12, padding:'6px 12px', flex:1 }}>📈 Followup</button>
                   <button onClick={() => startEdit(b)} style={{ fontSize:12, padding:'6px 12px' }}>Editar</button>
+                  <button title={`Clonar para ${b.fiscalYear+1}`} style={{ fontSize:12, padding:'6px 10px' }}
+                    onClick={async () => {
+                      const target = parseInt(window.prompt(`Ano fiscal de destino:`, String(b.fiscalYear+1)) || '');
+                      if (!target || target === b.fiscalYear) return;
+                      const inflStr = window.prompt('Inflação % (ex.: 4 para 4%):', '4');
+                      const infl = (parseFloat(inflStr)||0)/100;
+                      try {
+                        const cloned = await cloneBudget(b.id, target, infl, 0.02);
+                        alert(`Orçamento ${cloned.name} criado como rascunho.`);
+                        loadList();
+                      } catch(e) { alert('Erro: '+e.message); }
+                    }}>📋</button>
                   <button className="danger" style={{ fontSize:12, padding:'6px 10px' }}
                     onClick={async () => { if(window.confirm('Remover este orçamento?')){ await deleteBudget(b.id); loadList(); } }}>✕</button>
                 </div>
@@ -426,7 +439,25 @@ function BudgetMonthlyView({ budgetId, onRegenerate }) {
 function BudgetFollowup({ budgetId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { getBudgetFollowup(budgetId).then(d => { setData(d); setLoading(false); }); }, [budgetId]);
+  const [snapshots, setSnapshots] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    Promise.all([getBudgetFollowup(budgetId), getBudgetSnapshots(budgetId)])
+      .then(([d, snaps]) => { setData(d); setSnapshots(snaps); setLoading(false); });
+  }, [budgetId]);
+
+  async function takeSnapshot() {
+    if (!window.confirm('Tirar snapshot do mês anterior agora? Isso congela o histórico e gera alertas em custom_alerts.')) return;
+    setBusy(true);
+    try {
+      const n = await runBudgetSnapshot();
+      const fresh = await getBudgetSnapshots(budgetId);
+      setSnapshots(fresh);
+      alert(`Snapshot tirado: ${n} orçamento(s) processado(s).`);
+    } catch(e) { alert('Erro: ' + e.message); }
+    setBusy(false);
+  }
 
   if (loading || !data) return (
     <div style={{ padding:24 }}>
@@ -463,10 +494,13 @@ function BudgetFollowup({ budgetId, onBack }) {
     <div style={{ padding:24 }}>
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
         <button className="ghost" onClick={onBack}>← Voltar</button>
-        <div>
+        <div style={{ flex:1 }}>
           <div style={{ fontSize:16, fontWeight:700 }}>{budget.name}</div>
           <div style={{ fontSize:11, color:'var(--text3)' }}>Followup planejado × realizado · AF {budget.fiscalYear}</div>
         </div>
+        <button onClick={takeSnapshot} disabled={busy} title="Congela um snapshot do mês anterior, gera alertas em custom_alerts. Roda automático no dia 1 às 03h Brasília via pg_cron." style={{ fontSize:12 }}>
+          📸 {busy ? 'Processando…' : 'Snapshot agora'}
+        </button>
       </div>
 
       {/* KPI cards */}
@@ -492,11 +526,113 @@ function BudgetFollowup({ budgetId, onBack }) {
         <MonthlyTable table={table} showActual currentMonth={currentMonth} />
       </div>
 
+      {/* Alertas ativos */}
+      <ActiveAlerts table={table} currentMonth={currentMonth} />
+
       {/* Top desvios */}
-      <div className="card" style={{ padding:'16px 20px' }}>
+      <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
         <div className="section-title">Top desvios YTD</div>
         <TopDeviations table={table} currentMonth={currentMonth} />
       </div>
+
+      {/* Histórico de snapshots */}
+      {snapshots.length > 0 && (
+        <div className="card" style={{ padding:'16px 20px' }}>
+          <div className="section-title">Histórico de snapshots</div>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>
+            Snapshots congelados no dia 1 de cada mês (cron `0 6 1 * *` UTC). Mantém auditoria mesmo se você editar o orçamento depois.
+          </div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead><tr style={{ background:'var(--bg2)' }}>
+              {['Data','Mês ref','Planejado mês','Realizado mês','Δ%','YTD plan','YTD real','Projeção YE','Alertas'].map(h =>
+                <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</th>
+              )}
+            </tr></thead>
+            <tbody>
+              {snapshots.map(s => (
+                <tr key={s.id} style={{ borderBottom:'1px solid var(--border)' }}>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:11 }}>{s.snapshot_date}</td>
+                  <td style={{ padding:'7px 10px' }}>{MONTH_NAMES[(s.fiscal_month||1)-1]}</td>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)' }}>{fmtBRL(s.planned_total)}</td>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)' }}>{fmtBRL(s.actual_total)}</td>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)', color: varianceColor(parseFloat(s.variance_pct)), fontWeight:600 }}>
+                    {s.variance_pct !== null ? `${parseFloat(s.variance_pct)>=0?'+':''}${parseFloat(s.variance_pct).toFixed(1)}%` : '—'}
+                  </td>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text3)' }}>{fmtBRLShort(s.ytd_planned)}</td>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text3)' }}>{fmtBRLShort(s.ytd_actual)}</td>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:11, color:'var(--blue)' }}>{fmtBRLShort(s.ye_projection)}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'center' }}>
+                    {s.alerts_created > 0 ? <span className="tag tag-warn">🔔 {s.alerts_created}</span> : <span style={{ color:'var(--text3)' }}>—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActiveAlerts({ table, currentMonth }) {
+  const alerts = [];
+  const monthIdx = Math.max(0, currentMonth - 1);
+  for (const row of table) {
+    // Estouro mês corrente
+    const cur = row.months[monthIdx];
+    if (cur && cur.planned > 0 && cur.actual > 0 && cur.pct !== null && cur.pct > 10) {
+      alerts.push({
+        severity: cur.pct > 25 ? 'critical' : 'warning',
+        category: row.category,
+        scope: `${MONTH_NAMES[monthIdx]}/mês`,
+        pct: cur.pct,
+        planned: cur.planned,
+        actual: cur.actual,
+      });
+    }
+    // Estouro YTD
+    const plannedYtd = row.months.slice(0, currentMonth).reduce((s,c)=>s+c.planned,0);
+    const actualYtd = row.months.slice(0, currentMonth).reduce((s,c)=>s+c.actual,0);
+    if (plannedYtd > 0 && actualYtd > 0) {
+      const pctYtd = ((actualYtd/plannedYtd - 1) * 100);
+      if (pctYtd > 10) {
+        alerts.push({
+          severity: pctYtd > 25 ? 'critical' : 'warning',
+          category: row.category,
+          scope: 'YTD',
+          pct: pctYtd,
+          planned: plannedYtd,
+          actual: actualYtd,
+        });
+      }
+    }
+  }
+  alerts.sort((a,b) => (b.severity==='critical'?2:1) - (a.severity==='critical'?2:1) || b.pct - a.pct);
+
+  return (
+    <div className="card" style={{ padding:'16px 20px', marginBottom:14, borderLeft: alerts.some(a=>a.severity==='critical') ? '3px solid var(--red)' : (alerts.length ? '3px solid var(--amber)' : '3px solid var(--green)') }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <div className="section-title" style={{ margin:0 }}>
+          {alerts.length===0 ? '✅ Sem alertas — operação dentro do orçado' : `🚨 ${alerts.length} alerta${alerts.length>1?'s':''} ativo${alerts.length>1?'s':''}`}
+        </div>
+      </div>
+      {alerts.length > 0 && (
+        <div style={{ display:'grid', gap:6 }}>
+          {alerts.slice(0, 10).map((a, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background: a.severity==='critical' ? 'rgba(239,68,68,0.08)' : 'rgba(245,166,35,0.08)', border:`1px solid ${a.severity==='critical'?'var(--red)':'var(--amber)'}33`, borderRadius:6, fontSize:12 }}>
+              <span style={{ fontSize:14 }}>{a.severity==='critical'?'🔴':'🟡'}</span>
+              <span style={{ flex:1 }}>
+                <strong>{CATEGORY_LABELS[a.category] || a.category}</strong> · {a.scope} ·
+                <span style={{ color: varianceColor(a.pct), fontFamily:'var(--font-mono)', fontWeight:600, marginLeft:6 }}>+{a.pct.toFixed(1)}%</span>
+              </span>
+              <span style={{ color:'var(--text3)', fontFamily:'var(--font-mono)', fontSize:11 }}>
+                {fmtBRL(a.actual)} <span style={{ color:'var(--text3)' }}>/ orçado</span> {fmtBRL(a.planned)}
+              </span>
+            </div>
+          ))}
+          {alerts.length > 10 && <div style={{ fontSize:11, color:'var(--text3)', textAlign:'center', paddingTop:4 }}>+{alerts.length - 10} alertas adicionais</div>}
+        </div>
+      )}
     </div>
   );
 }

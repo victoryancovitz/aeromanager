@@ -1270,6 +1270,65 @@ export async function regenerateBudgetMonthly(budgetId) {
   return rows.length;
 }
 
+// Clonar orçamento para outro ano com inflação aplicada
+export async function cloneBudget(sourceId, targetYear, inflationPct = 0.04, fxAdjustPct = 0.02) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const src = await getBudget(sourceId);
+  if (!src) throw new Error('Orçamento de origem não encontrado');
+  const lines = await getBudgetLines(sourceId);
+  const replaced = src.name.replace(String(src.fiscalYear), String(targetYear));
+  const newName = replaced !== src.name ? replaced : `${src.name} (${targetYear})`;
+  const newBudget = await saveBudget({
+    aircraftId: src.aircraftId,
+    name: newName,
+    fiscalYear: targetYear,
+    status: 'draft',
+    fxUsdBrl: +(src.fxUsdBrl * (1 + fxAdjustPct)).toFixed(2),
+    fuelUsdGal: src.fuelUsdGal,
+    contingencyPct: src.contingencyPct,
+    hoursYearAssumed: src.hoursYearAssumed,
+    flightsYearAssumed: src.flightsYearAssumed,
+    overnightsYearAssumed: src.overnightsYearAssumed,
+    seasonality: src.seasonality,
+    notes: `Clonado de "${src.name}" com inflação ${(inflationPct*100).toFixed(1)}% e ajuste cambial ${(fxAdjustPct*100).toFixed(1)}% aplicados.`,
+  });
+  for (const l of lines) {
+    await saveBudgetLine({
+      budgetId: newBudget.id,
+      category: l.category,
+      description: l.description,
+      vendor: l.vendor,
+      costType: l.costType,
+      unit: l.unit,
+      unitAmountBrl: +(l.unitAmountBrl * (1 + inflationPct)).toFixed(2),
+      annualQtyAssumed: l.annualQtyAssumed,
+      recurrence: l.recurrence,
+      isActive: l.isActive,
+      sortOrder: l.sortOrder,
+    });
+  }
+  await regenerateBudgetMonthly(newBudget.id);
+  return newBudget;
+}
+
+// Dispara o snapshot mensal via RPC (mesma função que o cron usa)
+export async function runBudgetSnapshot() {
+  const { data, error } = await supabase.rpc('run_budget_snapshot');
+  if (error) throw error;
+  return data;
+}
+
+// Histórico de snapshots congelados
+export async function getBudgetSnapshots(budgetId) {
+  const { data, error } = await supabase
+    .from('budget_snapshots').select('*')
+    .eq('budget_id', budgetId)
+    .order('snapshot_date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 // Followup: planejado vs realizado por mês e categoria
 export async function getBudgetFollowup(budgetId) {
   const b = await getBudget(budgetId);
