@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { saveCost, deleteCost, bulkUpdateCosts, bulkDeleteCosts, getCostCategories } from '../store';
+import { saveCost, deleteCost, bulkUpdateCosts, bulkDeleteCosts, getCostCategories, listFinancialAccounts, uploadReceipt, getReceiptSignedUrl, removeReceipt } from '../store';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -50,7 +50,17 @@ const EMPTY = {
   amountBrl:'', description:'', referenceDate:new Date().toISOString().slice(0,10),
   invoiceNumber:'', vendor:'', engineHoursAtCost:'',
   recurrence:'once', recurrenceDay:'', recurrenceEnd:'', billingPeriod:'',
+  accountId:'', currency:'BRL', amountUsd:'', exchangeRate:'',
+  paidBy:'', reimbursable:false, reimbursedAt:'',
+  receiptUrl:'',
 };
+
+const CURRENCIES = [
+  { v:'BRL', label:'BRL (R$)', symbol:'R$' },
+  { v:'USD', label:'USD ($)',  symbol:'$' },
+  { v:'EUR', label:'EUR (€)',  symbol:'€' },
+];
+const CUR_SYMBOL = Object.fromEntries(CURRENCIES.map(c => [c.v, c.symbol]));
 
 function fmtBrl(v) { return 'R$ ' + Math.round(v||0).toLocaleString('pt-BR'); }
 function fmtBrl2(v) { return 'R$ ' + parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
@@ -68,10 +78,15 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkPatch, setBulkPatch]     = useState({});
   const [customCats, setCustomCats]   = useState([]);
+  const [accounts, setAccounts]       = useState([]);
+  const [receiptBusy, setReceiptBusy] = useState(false);
+  const [receiptErr, setReceiptErr]   = useState('');
+  const [receiptUrl, setReceiptUrl]   = useState('');
   const ms = useMultiSelect(costs);
 
   useEffect(() => {
     getCostCategories().then(setCustomCats).catch(() => {});
+    listFinancialAccounts().then(setAccounts).catch(() => {});
   }, []);
 
   // All categories: built-in + custom
@@ -118,14 +133,59 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
   }, [costs, flights, aircraft, filterAc]);
 
   function startNew() {
-    const init = { ...EMPTY, aircraftId: aircraft[0]?.id || '' };
+    const defAcc = accounts.find(a => a.is_default && a.is_active !== false);
+    const init = { ...EMPTY, aircraftId: aircraft[0]?.id || '', accountId: defAcc?.id || '', currency: defAcc?.currency || 'BRL' };
     if (preselFlight) { init.flightId = preselFlight.id; init.aircraftId = preselFlight.aircraftId; init.referenceDate = preselFlight.date; }
-    setForm(init); setEditing('new');
+    setForm(init); setEditing('new'); setReceiptErr(''); setReceiptUrl('');
   }
-  function startEdit(c) { setForm({...c}); setEditing(c.id); }
-  function cancel() { setEditing(null); }
-  function set(k,v) { setForm(f => { const n = {...f,[k]:v}; if(k==='category'){ const c=CATS.find(x=>x.v===v); if(c) n.costType=c.costType; } return n; }); }
-  async function submit(e) { e.preventDefault(); await saveCost({...form, amountBrl: parseFloat(form.amountBrl)||0}); reload(); setEditing(null); }
+  function startEdit(c) {
+    setForm({...EMPTY, ...c});
+    setEditing(c.id); setReceiptErr(''); setReceiptUrl('');
+    if (c.receiptUrl) { getReceiptSignedUrl(c.receiptUrl).then(u => setReceiptUrl(u||'')).catch(()=>{}); }
+  }
+  function cancel() { setEditing(null); setReceiptErr(''); setReceiptUrl(''); }
+  function set(k,v) {
+    setForm(f => {
+      const n = {...f,[k]:v};
+      if (k === 'category') { const c = CATS.find(x => x.v === v); if (c) n.costType = c.costType; }
+      // Auto-recalcula amount_brl quando amount_usd × exchange_rate em USD
+      if ((k === 'amountUsd' || k === 'exchangeRate') && n.currency === 'USD') {
+        const u = parseFloat(n.amountUsd || 0) || 0;
+        const r = parseFloat(n.exchangeRate || 0) || 0;
+        if (u > 0 && r > 0) n.amountBrl = (u * r).toFixed(2);
+      }
+      // Quando muda para BRL, limpa campos USD
+      if (k === 'currency' && v === 'BRL') { n.amountUsd = ''; n.exchangeRate = ''; }
+      return n;
+    });
+  }
+  async function onReceiptPicked(file) {
+    if (!file) return;
+    setReceiptBusy(true); setReceiptErr('');
+    try {
+      const path = await uploadReceipt(file);
+      setForm(f => ({...f, receiptUrl: path}));
+      const u = await getReceiptSignedUrl(path);
+      setReceiptUrl(u || '');
+    } catch(e) { setReceiptErr(e.message || 'Falha ao enviar'); }
+    setReceiptBusy(false);
+  }
+  async function clearReceipt() {
+    if (!form.receiptUrl) return;
+    if (!window.confirm('Remover comprovante deste lançamento?')) return;
+    setReceiptBusy(true); setReceiptErr('');
+    try {
+      await removeReceipt(form.receiptUrl);
+      setForm(f => ({...f, receiptUrl:''}));
+      setReceiptUrl('');
+    } catch(e) { setReceiptErr(e.message || 'Falha ao remover'); }
+    setReceiptBusy(false);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    await saveCost({...form, amountBrl: parseFloat(form.amountBrl)||0});
+    reload(); setEditing(null);
+  }
   async function remove(id) { if(window.confirm('Remover?')){ await deleteCost(id); reload(); } }
   async function bulkDelete() {
     if (!window.confirm(`Remover ${ms.count} lançamento(s)?`)) return;
@@ -173,15 +233,91 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
         </div>
         <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
           <div className="section-title">Valores</div>
-          <div className="g2" style={{ marginBottom:14 }}>
+          <div className="g3" style={{ marginBottom:14 }}>
+            <div><label>Moeda</label>
+              <select value={form.currency} onChange={e=>set('currency',e.target.value)}>
+                {CURRENCIES.map(c => <option key={c.v} value={c.v}>{c.label}</option>)}
+              </select>
+            </div>
             <div><label>Valor (R$) *</label><input type="number" required step="0.01" min="0" value={form.amountBrl} onChange={e=>set('amountBrl',e.target.value)} placeholder="0,00" /></div>
             <div><label>Data de competência *</label><input type="date" required value={form.referenceDate} onChange={e=>set('referenceDate',e.target.value)} /></div>
           </div>
+          {form.currency !== 'BRL' && (
+            <div className="g3" style={{ marginBottom:14 }}>
+              <div><label>Valor em {form.currency}</label><input type="number" step="0.01" min="0" value={form.amountUsd} onChange={e=>set('amountUsd',e.target.value)} placeholder="0.00" /></div>
+              <div><label>Câmbio ({form.currency}→BRL)</label><input type="number" step="0.0001" min="0" value={form.exchangeRate} onChange={e=>set('exchangeRate',e.target.value)} placeholder="5.20" /></div>
+              <div style={{ alignSelf:'end', fontSize:11, color:'var(--text3)' }}>R$ é calculado automaticamente.</div>
+            </div>
+          )}
           <div style={{ marginBottom:14 }}><label>Descrição</label><input value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Ex: AVGAS 100LL — 80L @ R$8,50" /></div>
           <div className="g2">
             <div><label>Fornecedor</label><input value={form.vendor} onChange={e=>set('vendor',e.target.value)} /></div>
             <div><label>Nº NF / Recibo</label><input value={form.invoiceNumber} onChange={e=>set('invoiceNumber',e.target.value)} /></div>
           </div>
+        </div>
+
+        <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+          <div className="section-title">Pagamento</div>
+          <div className="g3" style={{ marginBottom:14 }}>
+            <div><label>Conta financeira</label>
+              <select value={form.accountId || ''} onChange={e=>set('accountId', e.target.value)}>
+                <option value="">— não vinculada —</option>
+                {accounts.filter(a => a.is_active !== false).map(a => (
+                  <option key={a.id} value={a.id}>{a.name}{a.last_four?` ••••${a.last_four}`:''} ({a.currency||'BRL'})</option>
+                ))}
+              </select>
+              {accounts.length === 0 && (
+                <div style={{ fontSize:10, color:'var(--text3)', marginTop:4 }}>Cadastre contas em Configurações → Contas Financeiras.</div>
+              )}
+            </div>
+            <div><label>Pago por</label><input value={form.paidBy||''} onChange={e=>set('paidBy', e.target.value)} placeholder="Ex: Ricardo Mendes" /></div>
+            <div style={{ alignSelf:'center' }}>
+              <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+                <input type="checkbox" checked={!!form.reimbursable} onChange={e=>set('reimbursable', e.target.checked)} />
+                Reembolsável
+              </label>
+              {form.reimbursable && (
+                <input type="date" value={form.reimbursedAt||''} onChange={e=>set('reimbursedAt', e.target.value)} style={{ marginTop:6, fontSize:11 }} placeholder="Data do reembolso" />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+          <div className="section-title">Comprovante</div>
+          {receiptErr && (
+            <div style={{ padding:'8px 12px', marginBottom:10, background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.3)', borderRadius:6, color:'var(--red)', fontSize:12 }}>{receiptErr}</div>
+          )}
+          {form.receiptUrl ? (
+            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 14px', background:'var(--bg1)', borderRadius:8, border:'1px solid var(--border)' }}>
+              {receiptUrl && /\.(png|jpe?g|gif|webp)$/i.test(form.receiptUrl) ? (
+                <a href={receiptUrl} target="_blank" rel="noopener noreferrer">
+                  <img src={receiptUrl} alt="comprovante" style={{ width:64, height:64, objectFit:'cover', borderRadius:6, border:'1px solid var(--border)' }} />
+                </a>
+              ) : (
+                <div style={{ width:64, height:64, display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg2)', borderRadius:6, fontSize:24 }}>📄</div>
+              )}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:500, marginBottom:2 }}>Comprovante anexado</div>
+                <div style={{ fontSize:11, color:'var(--text3)', fontFamily:'var(--font-mono)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{form.receiptUrl.split('/').pop()}</div>
+                {receiptUrl && <a href={receiptUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--blue)' }}>Abrir em nova aba ↗</a>}
+              </div>
+              <button type="button" className="ghost" disabled={receiptBusy} onClick={clearReceipt} style={{ fontSize:11, color:'var(--red)' }}>Remover</button>
+            </div>
+          ) : (
+            <div>
+              <label style={{
+                display:'inline-flex', alignItems:'center', gap:8, padding:'8px 14px',
+                background:'var(--bg1)', border:'1px dashed var(--border)', borderRadius:8,
+                cursor: receiptBusy ? 'wait' : 'pointer', fontSize:12, color:'var(--text2)',
+              }}>
+                <input type="file" accept="image/*,application/pdf" disabled={receiptBusy}
+                  onChange={e => onReceiptPicked(e.target.files?.[0])}
+                  style={{ display:'none' }} />
+                {receiptBusy ? '⏳ Enviando…' : '📎 Anexar comprovante (imagem ou PDF, até 10MB)'}
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Recorrência */}
@@ -356,8 +492,21 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
                       <td style={{ padding:'9px 12px' }}>{grp&&<span style={{ fontSize:10, padding:'2px 6px', background:`${grp.color}22`, color:grp.color, borderRadius:6, fontWeight:600 }}>{grp.label}</span>}</td>
                       <td style={{ padding:'9px 12px', fontSize:11 }}>{cat?.icon} {cat?.label||c.category}</td>
                       <td style={{ padding:'9px 12px' }}><span style={{ fontSize:10, padding:'2px 6px', borderRadius:6, fontWeight:600, background:typeStyle.bg, color:typeStyle.color }}>{COST_TYPES.find(t=>t.v===c.costType)?.label||c.costType}</span></td>
-                      <td style={{ padding:'9px 12px', fontWeight:600, color:'var(--blue)', fontFamily:'var(--font-mono)', whiteSpace:'nowrap' }}>{fmtBrl2(c.amountBrl)}</td>
-                      <td style={{ padding:'9px 12px', color:'var(--text2)', maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.description||'—'}</td>
+                      <td style={{ padding:'9px 12px', fontWeight:600, color:'var(--blue)', fontFamily:'var(--font-mono)', whiteSpace:'nowrap' }}>
+                        {fmtBrl2(c.amountBrl)}
+                        {c.currency && c.currency !== 'BRL' && c.amountUsd != null && (
+                          <div style={{ fontSize:9, color:'var(--text3)', fontWeight:400 }}>
+                            {CUR_SYMBOL[c.currency] || c.currency} {parseFloat(c.amountUsd).toLocaleString('en-US',{maximumFractionDigits:2})}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding:'9px 12px', color:'var(--text2)', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {c.description||'—'}
+                        <span style={{ marginLeft:6 }}>
+                          {c.receiptUrl && <span title="Comprovante anexado" style={{ marginRight:4 }}>📎</span>}
+                          {c.reimbursable && <span title={c.reimbursedAt ? `Reembolsado em ${c.reimbursedAt}` : 'Aguardando reembolso'} style={{ fontSize:9, padding:'1px 5px', borderRadius:3, background: c.reimbursedAt?'rgba(16,185,129,.12)':'rgba(245,166,35,.12)', color: c.reimbursedAt?'var(--green)':'var(--amber)', fontWeight:600 }}>{c.reimbursedAt?'reemb.':'pendente'}</span>}
+                        </span>
+                      </td>
                       <td style={{ padding:'9px 12px', color:'var(--text3)' }}>{c.vendor||'—'}</td>
                       <td style={{ padding:'9px 12px', color:'var(--text3)', fontFamily:'var(--font-mono)', fontSize:11 }}>{fl?`${fl.departureIcao}→${fl.destinationIcao}`:'—'}</td>
                       <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}><button style={{ fontSize:11, padding:'3px 8px', marginRight:6 }} onClick={()=>startEdit(c)}>Editar</button><button className="danger" style={{ fontSize:11, padding:'3px 8px' }} onClick={()=>remove(c.id)}>✕</button></td>

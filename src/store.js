@@ -778,6 +778,13 @@ function toDB_cost(c, userId) {
     exclude_from_stats: !!c.excludeFromStats,
     is_template:      !!c.isTemplate,
     template_id:      c.templateId || null,
+    account_id:       c.accountId || null,
+    currency:         c.currency || 'BRL',
+    amount_usd:       c.amountUsd !== '' && c.amountUsd != null ? parseFloat(c.amountUsd) : null,
+    exchange_rate:    c.exchangeRate !== '' && c.exchangeRate != null ? parseFloat(c.exchangeRate) : null,
+    paid_by:          c.paidBy || null,
+    reimbursable:     !!c.reimbursable,
+    reimbursed_at:    c.reimbursedAt || null,
   };
 }
 
@@ -806,7 +813,55 @@ function fromDB_cost(r) {
     isTemplate:         r.is_template,
     templateId:     r.template_id,
     updatedAt:      r.updated_at,
+    accountId:      r.account_id || null,
+    currency:       r.currency || 'BRL',
+    amountUsd:      r.amount_usd,
+    exchangeRate:   r.exchange_rate,
+    paidBy:         r.paid_by || null,
+    reimbursable:   !!r.reimbursable,
+    reimbursedAt:   r.reimbursed_at || null,
   };
+}
+
+// ── Receipts (comprovantes) ──────────────────────────────────────────────────
+// Upload um arquivo para o bucket 'receipts' (privado). Retorna o path interno.
+export async function uploadReceipt(file) {
+  if (!file) throw new Error('Sem arquivo');
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+  const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const { error } = await supabase.storage.from('receipts').upload(path, file, {
+    cacheControl: '3600', upsert: false, contentType: file.type || undefined,
+  });
+  if (error) throw error;
+  return path;
+}
+
+// Gera URL assinada temporária para visualização (60 min)
+export async function getReceiptSignedUrl(path) {
+  if (!path) return null;
+  const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data?.signedUrl || null;
+}
+
+// Remove comprovante do storage
+export async function removeReceipt(path) {
+  if (!path) return;
+  const { error } = await supabase.storage.from('receipts').remove([path]);
+  if (error) throw error;
+}
+
+export async function listFinancialAccounts() {
+  const user = await getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('financial_accounts').select('*')
+    .eq('user_id', user.id)
+    .order('is_default', { ascending: false }).order('name');
+  if (error) throw error;
+  return data || [];
 }
 
 function toDB_maint(m, userId) {
