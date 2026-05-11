@@ -225,6 +225,172 @@ function AddComponentForm({ type, aircraftId, cellHours, onSaved, onCancel }) {
   );
 }
 
+const ROLE_LABELS = { owner: 'Proprietário', co_owner: 'Coproprietário', investor: 'Investidor' };
+
+function SociosManager({ aircraftId, aircraftReg }) {
+  const [owners, setOwners] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({
+    display_name: '', email: '', share_pct: '', role: 'owner',
+    joined_at: new Date().toISOString().slice(0,10), notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true); setError('');
+    try {
+      const { data, error } = await supabase
+        .from('aircraft_co_owners').select('*')
+        .eq('aircraft_id', aircraftId)
+        .is('left_at', null)
+        .order('share_pct', { ascending: false });
+      if (error) throw error;
+      setOwners(data || []);
+    } catch(e) { setError(e.message); setOwners([]); }
+    setLoading(false);
+  };
+
+  useEffect(() => { if (aircraftId && aircraftId !== 'new') load(); }, [aircraftId]);
+
+  const totalPct = owners.reduce((s, o) => s + (parseFloat(o.share_pct)||0), 0);
+  const remaining = 100 - totalPct;
+
+  async function addOwner(e) {
+    e.preventDefault();
+    setError('');
+    const pct = parseFloat(form.share_pct);
+    if (!form.display_name.trim()) { setError('Nome é obrigatório.'); return; }
+    if (!pct || pct <= 0) { setError('Percentual deve ser maior que 0.'); return; }
+    if (totalPct + pct > 100.001) {
+      setError(`Total ultrapassaria 100% (restante: ${remaining.toFixed(2)}%).`);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('aircraft_co_owners').insert({
+        aircraft_id: aircraftId,
+        display_name: form.display_name.trim(),
+        email: form.email.trim() || null,
+        share_pct: pct,
+        role: form.role || 'owner',
+        joined_at: form.joined_at,
+        notes: form.notes.trim() || null,
+      });
+      if (error) throw error;
+      setForm({ display_name:'', email:'', share_pct:'', role:'owner', joined_at:new Date().toISOString().slice(0,10), notes:'' });
+      setShowAdd(false);
+      await load();
+    } catch(err) { setError(err.message); }
+    setSaving(false);
+  }
+
+  async function removeOwner(id, name) {
+    if (!window.confirm(`Remover "${name}" como sócio? (mantém histórico via left_at)`)) return;
+    setError('');
+    try {
+      const { error } = await supabase.from('aircraft_co_owners')
+        .update({ left_at: new Date().toISOString().slice(0,10) })
+        .eq('id', id);
+      if (error) throw error;
+      await load();
+    } catch(err) { setError(err.message); }
+  }
+
+  return (
+    <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <div className="section-title" style={{ margin:0 }}>
+          Sócios da {aircraftReg}
+          {!loading && (
+            <span style={{ marginLeft:10, fontWeight:400, fontSize:11, color: totalPct === 100 ? 'var(--green)' : totalPct > 100 ? 'var(--red)' : 'var(--amber)' }}>
+              Total: {totalPct.toFixed(2)}% {totalPct === 100 ? '✓' : `(restante: ${remaining.toFixed(2)}%)`}
+            </span>
+          )}
+        </div>
+        {!showAdd && (
+          <button type="button" className="secondary" style={{ fontSize:12 }} onClick={() => setShowAdd(true)} disabled={totalPct >= 100}>
+            + Adicionar sócio
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ padding:'8px 12px', marginBottom:10, background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.3)', borderRadius:6, color:'var(--red)', fontSize:12 }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ color:'var(--text3)', fontSize:13, padding:'12px 0' }}>Carregando…</div>
+      ) : owners.length === 0 ? (
+        <div style={{ color:'var(--text3)', fontSize:13, padding:'20px 0', textAlign:'center' }}>
+          <div style={{ fontSize:24, marginBottom:6 }}>👥</div>
+          Nenhum sócio cadastrado. Aeronave 100% sua.
+        </div>
+      ) : (
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <thead>
+            <tr style={{ background:'var(--bg2)' }}>
+              {['Nome','E-mail','Participação','Papel','Entrada',''].map(h => (
+                <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {owners.map(o => (
+              <tr key={o.id} style={{ borderBottom:'1px solid var(--border)' }}>
+                <td style={{ padding:'8px 10px', fontWeight:500 }}>{o.display_name}</td>
+                <td style={{ padding:'8px 10px', color:'var(--text2)' }}>{o.email || '—'}</td>
+                <td style={{ padding:'8px 10px', fontFamily:'var(--font-mono)', color:'var(--blue)', fontWeight:600 }}>{parseFloat(o.share_pct).toFixed(2)}%</td>
+                <td style={{ padding:'8px 10px' }}><span className="tag tag-mono">{ROLE_LABELS[o.role] || o.role}</span></td>
+                <td style={{ padding:'8px 10px', color:'var(--text3)', fontFamily:'var(--font-mono)', fontSize:11 }}>{o.joined_at || '—'}</td>
+                <td style={{ padding:'8px 10px', textAlign:'right' }}>
+                  <button className="danger" style={{ fontSize:11, padding:'3px 8px' }} onClick={() => removeOwner(o.id, o.display_name)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {showAdd && (
+        <form onSubmit={addOwner} style={{ marginTop:14, padding:14, background:'var(--bg0)', border:'1px solid var(--blue)', borderRadius:8 }}>
+          <div className="section-title" style={{ color:'var(--blue)', marginBottom:10 }}>Novo sócio</div>
+          <div className="g3" style={{ marginBottom:10 }}>
+            <div><label>Nome *</label><input required value={form.display_name} onChange={e=>setForm(f=>({...f, display_name:e.target.value}))} placeholder="Nome completo" /></div>
+            <div><label>E-mail</label><input type="email" value={form.email} onChange={e=>setForm(f=>({...f, email:e.target.value}))} placeholder="opcional" /></div>
+            <div>
+              <label>Participação (%) *</label>
+              <input type="number" step="0.01" min="0.01" max={remaining.toFixed(2)} required value={form.share_pct} onChange={e=>setForm(f=>({...f, share_pct:e.target.value}))} placeholder={`máx ${remaining.toFixed(2)}`} />
+            </div>
+          </div>
+          <div className="g3">
+            <div><label>Papel</label>
+              <select value={form.role} onChange={e=>setForm(f=>({...f, role:e.target.value}))}>
+                <option value="owner">Proprietário</option>
+                <option value="co_owner">Coproprietário</option>
+                <option value="investor">Investidor</option>
+              </select>
+            </div>
+            <div><label>Data de entrada</label><input type="date" value={form.joined_at} onChange={e=>setForm(f=>({...f, joined_at:e.target.value}))} /></div>
+            <div><label>Notas</label><input value={form.notes} onChange={e=>setForm(f=>({...f, notes:e.target.value}))} placeholder="opcional" /></div>
+          </div>
+          <div style={{ display:'flex', gap:8, marginTop:12 }}>
+            <button type="submit" className="primary" disabled={saving} style={{ fontSize:12 }}>{saving?'Salvando…':'Adicionar sócio'}</button>
+            <button type="button" onClick={() => { setShowAdd(false); setError(''); }} style={{ fontSize:12 }}>Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      <div style={{ fontSize:11, color:'var(--text3)', marginTop:12, paddingTop:10, borderTop:'1px solid var(--border)' }}>
+        💡 Os sócios cadastrados aqui aparecem automaticamente em <strong>Rateio entre sócios</strong> para divisão de custos por período (fixo, proporcional a horas, direto ou isento).
+      </div>
+    </div>
+  );
+}
+
 export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -612,9 +778,13 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
           </div>
         )}
         {tab === 'socios' && (
-          <div style={{ padding: '20px 0' }}>
-            <p style={{ color: 'var(--text3)', fontSize: 13 }}>Módulo de sócios em breve.</p>
-          </div>
+          editing === 'new' ? (
+            <div className="card" style={{ padding:'16px 20px' }}>
+              <p style={{ color:'var(--text3)', fontSize:13, margin:0 }}>Salve a aeronave primeiro para gerenciar os sócios.</p>
+            </div>
+          ) : (
+            <SociosManager aircraftId={editing} aircraftReg={form.registration} />
+          )
         )}
         {tab === 'dbe' && session && (
           <DBEModule aircraft={editing} session={session} />
