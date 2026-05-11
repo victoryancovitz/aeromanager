@@ -707,6 +707,11 @@ function toDB_flight(f, userId) {
     source:               f.source || 'manual',
     gps_track_points:     parseInt(f.gpsTrackPoints) || 0,
     logbook_notes:        f.logbookNotes || null,
+    block_out_time:       f.blockOutTime || null,
+    block_in_time:        f.blockInTime || null,
+    block_time_minutes:   f.blockTimeMinutes != null ? parseInt(f.blockTimeMinutes) : null,
+    destination_fbo:      f.destinationFbo || null,
+    crew_notes:           f.crewNotes || null,
   };
 }
 
@@ -739,6 +744,11 @@ function fromDB_flight(r) {
     gpsTrackPoints:     r.gps_track_points,
     logbookNotes:       r.logbook_notes,
     missionId:          r.mission_id || null,
+    blockOutTime:       r.block_out_time,
+    blockInTime:        r.block_in_time,
+    blockTimeMinutes:   r.block_time_minutes,
+    destinationFbo:     r.destination_fbo,
+    crewNotes:          r.crew_notes,
     updatedAt:          r.updated_at,
   };
 }
@@ -1134,6 +1144,105 @@ export async function removeComponent(id, cellHours, reason) {
 }
 
 // ── Aircraft Components (motores, hélices) ─────────────────────────────────────
+
+// ── FLIGHT CREW (tripulação por voo) ─────────────────────────────────────────
+export async function getFlightCrew(flightId) {
+  const { data, error } = await supabase
+    .from('flight_crew').select('*, crew_member:crew_member_id(full_name, role, anac_code)')
+    .eq('flight_id', flightId).order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveFlightCrewMember(fc) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const totalCrewCost = computeTotalCrewCost(fc);
+  const row = {
+    flight_id: fc.flight_id || fc.flightId,
+    crew_member_id: fc.crew_member_id || fc.crewMemberId || null,
+    user_id: user.id,
+    name_adhoc: fc.name_adhoc || fc.nameAdhoc || null,
+    role: fc.role,
+    block_out: fc.block_out || null,
+    takeoff_time: fc.takeoff_time || null,
+    landing_time: fc.landing_time || null,
+    block_in: fc.block_in || null,
+    flight_time_minutes: fc.flight_time_minutes != null ? parseInt(fc.flight_time_minutes) : null,
+    block_time_minutes: fc.block_time_minutes != null ? parseInt(fc.block_time_minutes) : null,
+    daily_rate_applied: fc.daily_rate_applied != null ? parseFloat(fc.daily_rate_applied) : null,
+    per_diem_applied: fc.per_diem_applied != null ? parseFloat(fc.per_diem_applied) : null,
+    currency: fc.currency || 'BRL',
+    days_count: fc.days_count != null ? parseFloat(fc.days_count) : 1,
+    total_crew_cost: totalCrewCost,
+    notes: fc.notes || null,
+  };
+  if (fc.id) {
+    const { data, error } = await supabase.from('flight_crew').update(row).eq('id', fc.id).select().single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase.from('flight_crew').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+export async function deleteFlightCrewMember(id) {
+  const { error } = await supabase.from('flight_crew').delete().eq('id', id);
+  if (error) throw error;
+}
+
+function computeTotalCrewCost(fc) {
+  const rate = parseFloat(fc.daily_rate_applied || fc.dailyRateApplied || 0) || 0;
+  const perDiem = parseFloat(fc.per_diem_applied || fc.perDiemApplied || 0) || 0;
+  const days = parseFloat(fc.days_count || fc.daysCount || 1) || 1;
+  return Math.round(((rate + perDiem) * days) * 100) / 100;
+}
+
+// Gera lançamentos em costs para cada tripulante do voo. Retorna número de rows criadas.
+export async function generateCrewCostsForFlight({ flightId, aircraftId, flightDate, fxUsdBrl = 5.0 }) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const crewRows = await getFlightCrew(flightId);
+  if (!crewRows.length) return 0;
+  // Limpa lançamentos antigos auto-gerados deste voo para evitar duplicação
+  await supabase.from('costs').delete()
+    .eq('flight_id', flightId).eq('user_id', user.id).eq('category', 'crew')
+    .ilike('description', 'auto:%');
+  const costs = [];
+  for (const fc of crewRows) {
+    const name = fc.crew_member?.full_name || fc.name_adhoc || 'Tripulante';
+    const role = fc.role || 'crew';
+    const cur = fc.currency || 'BRL';
+    const days = parseFloat(fc.days_count || 1) || 1;
+    const rate = parseFloat(fc.daily_rate_applied || 0) || 0;
+    const perDiem = parseFloat(fc.per_diem_applied || 0) || 0;
+    const fx = cur === 'USD' ? (parseFloat(fxUsdBrl) || 5.0) : 1.0;
+    if (rate > 0) {
+      costs.push({
+        user_id: user.id, aircraft_id: aircraftId, flight_id: flightId, category: 'crew',
+        cost_type: 'variable',
+        amount_brl: Math.round(rate * days * fx * 100) / 100,
+        description: `auto: Diária ${role.toUpperCase()} ${name} (${cur} ${rate} × ${days}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
+        reference_date: flightDate, vendor: name, recurrence: 'once',
+      });
+    }
+    if (perDiem > 0) {
+      costs.push({
+        user_id: user.id, aircraft_id: aircraftId, flight_id: flightId, category: 'crew',
+        cost_type: 'variable',
+        amount_brl: Math.round(perDiem * days * fx * 100) / 100,
+        description: `auto: Per diem ${role.toUpperCase()} ${name} (${cur} ${perDiem} × ${days}d${cur==='USD'?` × ${fx.toFixed(2)}`:''})`,
+        reference_date: flightDate, vendor: name, recurrence: 'once',
+      });
+    }
+  }
+  if (!costs.length) return 0;
+  const { error } = await supabase.from('costs').insert(costs);
+  if (error) throw error;
+  return costs.length;
+}
 
 // ── BUDGETS / ORÇAMENTO ──────────────────────────────────────────────────────
 const fromBudget = r => ({

@@ -1,6 +1,6 @@
 // Flights.js — v5.40
-import React, { useState } from 'react';
-import { saveFlight, deleteFlight } from '../store';
+import React, { useState, useEffect } from 'react';
+import { saveFlight, deleteFlight, getFlightCrew, saveFlightCrewMember, deleteFlightCrewMember, generateCrewCostsForFlight } from '../store';
 import { supabase } from '../supabase';
 import { AcIcon } from './Instruments';
 import { useMultiSelect } from '../hooks/useMultiSelect';
@@ -13,8 +13,21 @@ const EMPTY = {
   date:new Date().toISOString().slice(0,10), takeoffUtc:'', landingUtc:'',
   flightTimeMinutes:0, distanceNm:'', fuelAddedLiters:'', fuelPricePerLiter:'',
   cruiseAltitudeFt:'', flightConditions:'vfr', purpose:'leisure', cycles:1,
-  logbookNotes:'', autoLaunchCost: true
+  logbookNotes:'', autoLaunchCost: true,
+  blockOutTime:'', blockInTime:'', blockTimeMinutes:0,
+  destinationFbo:'', crewNotes:'',
 };
+
+const ROLE_LABEL = {
+  pic: 'PIC (Comandante)', sic: 'SIC (Co-piloto)',
+  flight_attendant: 'Comissária(o)', mechanic: 'Mecânico', other: 'Outro',
+};
+
+function calcBlockMins(out, inT, date) {
+  if (!out || !inT) return 0;
+  const d = (new Date(`${date}T${inT}:00Z`) - new Date(`${date}T${out}:00Z`)) / 60000;
+  return d > 0 ? Math.round(d) : 0;
+}
 
 export default function Flights({ flights=[], aircraft=[], costs=[], reload, setPage, setPreselFlight }) {
   const [editing, setEditing] = useState(null);
@@ -43,6 +56,11 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
           if (mins <= 0) { setTimeError('⚠ Pouso não pode ser antes da decolagem'); n.flightTimeMinutes = 0; }
           else { setTimeError(''); n.flightTimeMinutes = mins; }
         }
+      }
+      if (k==='blockOutTime' || k==='blockInTime') {
+        const bOut = k==='blockOutTime' ? v : f.blockOutTime;
+        const bIn  = k==='blockInTime'  ? v : f.blockInTime;
+        if (bOut && bIn) n.blockTimeMinutes = calcBlockMins(bOut, bIn, f.date);
       }
       return n;
     });
@@ -120,10 +138,16 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
               </div>
               <div><label>Alternado</label><input value={form.alternateIcao} onChange={e=>set('alternateIcao',e.target.value.toUpperCase())} placeholder="SBSP" maxLength={4} /></div>
             </div>
-            <div className="g3" style={{ marginBottom:timeError?4:14 }}>
+            <div className="g4" style={{ marginBottom:timeError?4:14 }}>
+              <div><label>Block Out (UTC)</label><input type="time" value={form.blockOutTime} onChange={e=>set('blockOutTime',e.target.value)} title="Saída do calço — início do consumo de combustível em solo" /></div>
               <div><label>Decolagem (UTC)</label><input type="time" value={form.takeoffUtc} onChange={e=>set('takeoffUtc',e.target.value)} /></div>
               <div><label>Pouso (UTC)</label><input type="time" value={form.landingUtc} onChange={e=>set('landingUtc',e.target.value)} style={{ borderColor:timeError?'#ef4444':undefined }} /></div>
+              <div><label>Block In (UTC)</label><input type="time" value={form.blockInTime} onChange={e=>set('blockInTime',e.target.value)} title="Entrada no calço" /></div>
+            </div>
+            <div className="g3" style={{ marginBottom:timeError?4:14 }}>
               <div><label>Tempo de voo</label><input readOnly value={form.flightTimeMinutes>0?`${h}h ${m.toString().padStart(2,'0')}min`:'—'} style={{ color:'#4a9eff', fontFamily:"'JetBrains Mono',monospace", fontWeight:600 }} /></div>
+              <div><label>Tempo de bloco</label><input readOnly value={form.blockTimeMinutes>0?`${Math.floor(form.blockTimeMinutes/60)}h ${(form.blockTimeMinutes%60).toString().padStart(2,'0')}min`:'—'} style={{ color:'#a78bfa', fontFamily:"'JetBrains Mono',monospace", fontWeight:600 }} /></div>
+              <div><label>FBO destino</label><input value={form.destinationFbo||''} onChange={e=>set('destinationFbo',e.target.value)} placeholder="Signature, Atlantic..." /></div>
             </div>
             {timeError && <div style={{ color:'#ef4444', fontSize:12, marginBottom:10 }}>{timeError}</div>}
             <div className="g4" style={{ marginBottom:0 }}>
@@ -142,10 +166,19 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
             </div>
             {fuelCost>0 && <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:10, fontSize:13, color:'var(--text2)', cursor:'pointer' }}><input type="checkbox" checked={form.autoLaunchCost} onChange={e=>set('autoLaunchCost',e.target.checked)} /> Lançar combustível como custo automaticamente ao salvar</label>}
           </div>
-          <div className="card" style={{ padding:'16px 20px', marginBottom:20 }}>
+          <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
             <div className="section-title">Diário de bordo</div>
             <textarea placeholder="Condições meteorológicas, observações, passageiros, intercorrências..." value={form.logbookNotes} onChange={e=>set('logbookNotes',e.target.value)} />
           </div>
+
+          {editing && editing !== 'new' ? (
+            <FlightCrewSection flightId={editing} flightDate={form.date} aircraftId={form.aircraftId} crewNotes={form.crewNotes} onCrewNotesChange={v=>set('crewNotes',v)} />
+          ) : (
+            <div className="card" style={{ padding:'14px 20px', marginBottom:14 }}>
+              <div className="section-title" style={{ marginBottom:6 }}>Tripulação deste voo</div>
+              <p style={{ color:'var(--text3)', fontSize:12, margin:0 }}>Salve o voo primeiro para adicionar tripulantes, diárias e per diems.</p>
+            </div>
+          )}
           <div style={{ position:'sticky', bottom:0, background:'var(--bg0)', padding:'12px 0', marginTop:4, display:'flex', gap:10, borderTop:'1px solid var(--bg2)' }}>
             <button type="submit" className="primary" disabled={!!timeError}>Salvar voo</button>
             <button type="button" onClick={cancel}>Cancelar</button>
@@ -231,6 +264,208 @@ export default function Flights({ flights=[], aircraft=[], costs=[], reload, set
       {fboAirport && (
         <FBOModal airport={fboAirport} onClose={() => setFboAirport(null)} />
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tripulação deste voo
+// ─────────────────────────────────────────────────────────────────────────────
+function FlightCrewSection({ flightId, flightDate, aircraftId, crewNotes, onCrewNotesChange }) {
+  const [crewList, setCrewList] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+  const [form, setForm] = useState({
+    crew_member_id: '', name_adhoc: '', role: 'pic',
+    daily_rate_applied: '', per_diem_applied: '',
+    currency: 'BRL', days_count: 1, notes: '',
+  });
+
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      const [fc, mb] = await Promise.all([
+        getFlightCrew(flightId),
+        supabase.from('crew_members').select('*').eq('is_active', true).order('full_name'),
+      ]);
+      setCrewList(fc);
+      setMembers(mb.data || []);
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { if (flightId) load(); }, [flightId]);
+
+  function onSelectMember(id) {
+    if (!id) { setForm(f => ({...f, crew_member_id:'', daily_rate_applied:'', per_diem_applied:'', currency:'BRL'})); return; }
+    const m = members.find(x => x.id === id);
+    if (!m) return;
+    // Sugere rates do tripulante. Default: BRL se houver, senão USD.
+    const useUsd = (!m.daily_rate_brl && m.daily_rate_usd) || (!m.per_diem_domestic_brl && m.per_diem_international_usd);
+    setForm(f => ({
+      ...f,
+      crew_member_id: id,
+      name_adhoc: '',
+      role: m.role || 'pic',
+      currency: useUsd ? 'USD' : 'BRL',
+      daily_rate_applied: useUsd ? (m.daily_rate_usd || '') : (m.daily_rate_brl || ''),
+      per_diem_applied: useUsd ? (m.per_diem_international_usd || '') : (m.per_diem_domestic_brl || ''),
+    }));
+  }
+
+  async function addCrew(e) {
+    e.preventDefault();
+    setError('');
+    if (!form.crew_member_id && !form.name_adhoc.trim()) {
+      setError('Selecione um tripulante ou informe um nome ad-hoc.');
+      return;
+    }
+    try {
+      await saveFlightCrewMember({
+        flight_id: flightId,
+        crew_member_id: form.crew_member_id || null,
+        name_adhoc: form.crew_member_id ? null : form.name_adhoc.trim(),
+        role: form.role,
+        daily_rate_applied: form.daily_rate_applied !== '' ? parseFloat(form.daily_rate_applied) : null,
+        per_diem_applied: form.per_diem_applied !== '' ? parseFloat(form.per_diem_applied) : null,
+        currency: form.currency || 'BRL',
+        days_count: parseFloat(form.days_count) || 1,
+        notes: form.notes.trim() || null,
+      });
+      setForm({ crew_member_id:'', name_adhoc:'', role:'pic', daily_rate_applied:'', per_diem_applied:'', currency:'BRL', days_count:1, notes:'' });
+      setShowAdd(false);
+      await load();
+    } catch(err) { setError(err.message); }
+  }
+
+  async function removeCrew(id) {
+    if (!window.confirm('Remover este tripulante do voo?')) return;
+    setError('');
+    try { await deleteFlightCrewMember(id); await load(); }
+    catch(err) { setError(err.message); }
+  }
+
+  async function generateCosts() {
+    if (!window.confirm('Gerar lançamentos de custo em Custos? Lançamentos auto-gerados anteriores deste voo serão substituídos.')) return;
+    setGenBusy(true); setError('');
+    try {
+      const n = await generateCrewCostsForFlight({ flightId, aircraftId, flightDate });
+      alert(`✓ ${n} lançamento(s) de custo criado(s) na categoria 'crew'.`);
+    } catch(err) { setError(err.message); }
+    setGenBusy(false);
+  }
+
+  const totalBRL = crewList.reduce((s, c) => {
+    const cost = parseFloat(c.total_crew_cost || 0);
+    const fx = c.currency === 'USD' ? 5.0 : 1.0;
+    return s + cost * fx;
+  }, 0);
+
+  return (
+    <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <div className="section-title" style={{ margin:0 }}>
+          Tripulação deste voo
+          {!loading && crewList.length > 0 && (
+            <span style={{ marginLeft:10, fontWeight:400, fontSize:11, color:'var(--text3)' }}>
+              {crewList.length} pessoa(s) · custo total ~ R$ {totalBRL.toLocaleString('pt-BR',{maximumFractionDigits:0})}
+            </span>
+          )}
+        </div>
+        <div style={{ display:'flex', gap:6 }}>
+          {crewList.length > 0 && (
+            <button type="button" onClick={generateCosts} disabled={genBusy} style={{ fontSize:12 }}>
+              💰 {genBusy?'Gerando…':'Gerar lançamentos de custo'}
+            </button>
+          )}
+          {!showAdd && <button type="button" className="secondary" onClick={() => setShowAdd(true)} style={{ fontSize:12 }}>+ Adicionar</button>}
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ padding:'8px 12px', marginBottom:10, background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.3)', borderRadius:6, color:'var(--red)', fontSize:12 }}>{error}</div>
+      )}
+
+      {loading ? (
+        <div style={{ color:'var(--text3)', fontSize:12, padding:'10px 0' }}>Carregando…</div>
+      ) : crewList.length === 0 && !showAdd ? (
+        <div style={{ color:'var(--text3)', fontSize:12, padding:'14px 0', textAlign:'center' }}>
+          Nenhum tripulante cadastrado neste voo.
+        </div>
+      ) : crewList.length > 0 && (
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom: showAdd ? 12 : 0 }}>
+          <thead>
+            <tr style={{ background:'var(--bg2)' }}>
+              {['Nome','Função','Diária','Per diem','Moeda','Dias','Total','Notas',''].map(h => (
+                <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {crewList.map(c => (
+              <tr key={c.id} style={{ borderBottom:'1px solid var(--border)' }}>
+                <td style={{ padding:'8px 10px', fontWeight:500 }}>{c.crew_member?.full_name || c.name_adhoc || '—'}</td>
+                <td style={{ padding:'8px 10px' }}><span className="tag tag-mono">{ROLE_LABEL[c.role] || c.role}</span></td>
+                <td style={{ padding:'8px 10px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{c.daily_rate_applied != null ? parseFloat(c.daily_rate_applied).toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—'}</td>
+                <td style={{ padding:'8px 10px', fontFamily:'var(--font-mono)', textAlign:'right' }}>{c.per_diem_applied != null ? parseFloat(c.per_diem_applied).toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—'}</td>
+                <td style={{ padding:'8px 10px', textAlign:'center' }}>{c.currency || 'BRL'}</td>
+                <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)' }}>{parseFloat(c.days_count||1)}</td>
+                <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)', color:'var(--blue)', fontWeight:600 }}>
+                  {c.currency==='USD'?'$':'R$'} {parseFloat(c.total_crew_cost||0).toLocaleString('pt-BR',{maximumFractionDigits:0})}
+                </td>
+                <td style={{ padding:'8px 10px', color:'var(--text3)', fontSize:11, maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.notes || '—'}</td>
+                <td style={{ padding:'8px 10px', textAlign:'right' }}>
+                  <button type="button" className="danger" onClick={() => removeCrew(c.id)} style={{ fontSize:10, padding:'3px 8px' }}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {showAdd && (
+        <form onSubmit={addCrew} style={{ marginTop:8, padding:14, background:'var(--bg0)', border:'1px solid var(--blue)', borderRadius:8 }}>
+          <div className="section-title" style={{ color:'var(--blue)', marginBottom:10 }}>Adicionar tripulante</div>
+          <div className="g3" style={{ marginBottom:10 }}>
+            <div><label>Tripulante cadastrado</label>
+              <select value={form.crew_member_id} onChange={e=>onSelectMember(e.target.value)}>
+                <option value="">— ou informe ad-hoc abaixo —</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.full_name} {m.anac_code?`(${m.anac_code})`:''}</option>)}
+              </select>
+            </div>
+            <div><label>Ou nome ad-hoc</label><input value={form.name_adhoc} onChange={e=>setForm(f=>({...f, name_adhoc:e.target.value, crew_member_id:''}))} placeholder="Nome do tripulante" disabled={!!form.crew_member_id} /></div>
+            <div><label>Função *</label>
+              <select required value={form.role} onChange={e=>setForm(f=>({...f, role:e.target.value}))}>
+                {Object.entries(ROLE_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="g4" style={{ marginBottom:10 }}>
+            <div><label>Diária (rate)</label><input type="number" step="0.01" value={form.daily_rate_applied} onChange={e=>setForm(f=>({...f, daily_rate_applied:e.target.value}))} placeholder="0.00" /></div>
+            <div><label>Per diem</label><input type="number" step="0.01" value={form.per_diem_applied} onChange={e=>setForm(f=>({...f, per_diem_applied:e.target.value}))} placeholder="0.00" /></div>
+            <div><label>Moeda</label>
+              <select value={form.currency} onChange={e=>setForm(f=>({...f, currency:e.target.value}))}>
+                <option value="BRL">BRL (R$)</option>
+                <option value="USD">USD ($)</option>
+              </select>
+            </div>
+            <div><label>Dias</label><input type="number" step="0.5" min="0.5" value={form.days_count} onChange={e=>setForm(f=>({...f, days_count:e.target.value}))} /></div>
+          </div>
+          <div style={{ marginBottom:10 }}><label>Notas</label><input value={form.notes} onChange={e=>setForm(f=>({...f, notes:e.target.value}))} placeholder="ex: hotel + transfer incluso" /></div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button type="submit" className="primary" style={{ fontSize:12 }}>Adicionar</button>
+            <button type="button" onClick={() => { setShowAdd(false); setError(''); }} style={{ fontSize:12 }}>Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid var(--border)' }}>
+        <label style={{ fontSize:11, color:'var(--text3)' }}>Observações da tripulação</label>
+        <textarea value={crewNotes||''} onChange={e=>onCrewNotesChange(e.target.value)} placeholder="Hotel utilizado, transfer, intercorrências…" style={{ minHeight:50, fontSize:12 }} />
+      </div>
     </div>
   );
 }
