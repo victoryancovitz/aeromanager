@@ -6,6 +6,7 @@ import { searchAircraftDB } from '../aircraftDB';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import IcaoInput from './IcaoInput';
 import AircraftSearchInput from './AircraftSearchInput';
+import DBEModule from './DBEModule';
 
 const EMPTY = {
   registration:'', type:'single_engine', manufacturer:'', model:'',
@@ -232,7 +233,12 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
   const [deleting, setDeleting] = useState(false);
   const [components, setComponents] = useState([]);
   const [showAddComp, setShowAddComp] = useState(null); // 'engine' | 'propeller' | null
+  const [session, setSession] = useState(null);
   const ms = useMultiSelect(aircraft);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data?.session || null));
+  }, []);
 
   function startNew() { setForm({...EMPTY}); setEditing('new'); setSearchQuery(''); setTab('basic'); setComponents([]); setShowAddComp(null); }
   function startEdit(ac) {
@@ -310,6 +316,9 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
     { id:'hours',     label:'Célula'        },
     { id:'perf',      label:'Performance'   },
     { id:'climb',     label:'Subida'        },
+    { id:'documents', label:'Documentos'    },
+    { id:'socios',    label:'Sócios'        },
+    { id:'dbe',       label:'DBE / ANAC'    },
   ];
 
   const perfCols  = [{ key:'altFt',label:'Alt (ft)'},{ key:'power',label:'Pot (%)'},{ key:'ktas',label:'KTAS'},{ key:'fuelLph',label:'L/h'}];
@@ -349,7 +358,27 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
         {tab==='basic' && (
           <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
             <div className="g3" style={{ marginBottom:14 }}>
-              <div><label>Matrícula *</label><AircraftSearchInput value={form.registration} onChange={(reg, data) => applyRAB(reg, data)} placeholder="PR-VCO, PP-XRV..." required className="" /><div style={{fontSize:10,color:'var(--text3)',marginTop:2}}>Digite a matrícula para preencher automaticamente com dados do RAB/ANAC</div></div>
+              <div>
+                <label>Matrícula *</label>
+                <AircraftSearchInput
+                  value={form.registration}
+                  onChange={(reg, rabData) => {
+                    set('registration', reg);
+                    if (rabData) {
+                      if (rabData.fabricante) set('manufacturer', rabData.fabricante);
+                      if (rabData.modelo) set('model', rabData.modelo);
+                      if (rabData.ano_fabricacao) set('year', rabData.ano_fabricacao);
+                      if (rabData.motor_modelo) set('engineModel', rabData.motor_modelo.replace('MOTOR CONVENCIONAL','').trim());
+                      if (rabData.motor_quantidade > 1) set('type', 'multi_engine');
+                    }
+                  }}
+                  placeholder="PR-VCO, PP-XRV..."
+                  required
+                />
+                <div style={{fontSize:10, color:'var(--text3)', marginTop:3}}>
+                  Digite a matrícula para preencher automaticamente com dados do RAB/ANAC
+                </div>
+              </div>
               <div><label>Tipo *</label>
                 <select required value={form.type} onChange={e=>set('type',e.target.value)}>
                   <option value="single_engine">Monomotor</option>
@@ -561,6 +590,20 @@ export default function Aircraft({ aircraft=[], reload, onImportPOH }) {
               addRow={()=>set('climbProfiles',[...(form.climbProfiles||[]),{altFromFt:0,altToFt:4500,kias:76,fpm:700,fuelLph:40,distNm:10}])}
             />
           </div>
+        )}
+
+        {tab === 'documents' && (
+          <div style={{ padding: '20px 0' }}>
+            <p style={{ color: 'var(--text3)', fontSize: 13 }}>Módulo de documentos em breve.</p>
+          </div>
+        )}
+        {tab === 'socios' && (
+          <div style={{ padding: '20px 0' }}>
+            <p style={{ color: 'var(--text3)', fontSize: 13 }}>Módulo de sócios em breve.</p>
+          </div>
+        )}
+        {tab === 'dbe' && session && (
+          <DBEModule aircraft={editing} session={session} />
         )}
 
         <div style={{ position:'sticky', bottom:0, background:'var(--bg0)', padding:'12px 0', marginTop:4, display:'flex', gap:10, borderTop:'1px solid var(--bg2)' }}>
