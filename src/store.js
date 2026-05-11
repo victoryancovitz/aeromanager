@@ -1312,6 +1312,54 @@ export async function cloneBudget(sourceId, targetYear, inflationPct = 0.04, fxA
   return newBudget;
 }
 
+// ── Company branding (perfil da gestora para relatórios) ─────────────────────
+export async function getCompanyProfile() {
+  const user = await getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('user_settings').select('profile')
+    .eq('user_id', user.id).maybeSingle();
+  if (error) throw error;
+  return (data?.profile?.company) || {
+    name: '', cnpj: '', address: '', phone: '', email: '',
+    website: '', primary_color: '#4a9eff', logo_url: '', footer_text: '',
+  };
+}
+
+export async function saveCompanyProfile(company) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  // Read existing profile, merge, write back
+  const { data: existing } = await supabase
+    .from('user_settings').select('id, profile').eq('user_id', user.id).maybeSingle();
+  const merged = { ...(existing?.profile||{}), company };
+  if (existing?.id) {
+    const { error } = await supabase.from('user_settings')
+      .update({ profile: merged, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('user_settings')
+      .insert({ user_id: user.id, profile: merged });
+    if (error) throw error;
+  }
+  return company;
+}
+
+export async function uploadCompanyLogo(file) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  if (!file) throw new Error('Arquivo inválido');
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+  const path = `${user.id}/logo-${Date.now()}.${ext}`;
+  const { error: upErr } = await supabase.storage.from('logos').upload(path, file, {
+    cacheControl: '3600', upsert: true, contentType: file.type,
+  });
+  if (upErr) throw upErr;
+  const { data } = supabase.storage.from('logos').getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
 // Dispara o snapshot mensal via RPC (mesma função que o cron usa)
 export async function runBudgetSnapshot() {
   const { data, error } = await supabase.rpc('run_budget_snapshot');

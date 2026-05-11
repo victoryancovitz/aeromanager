@@ -48,6 +48,7 @@ const EmailTemplates       = React.lazy(() => import('./components/EmailTemplate
 const CustomAlerts         = React.lazy(() => import('./components/CustomAlerts'));
 const OnboardingWizard     = React.lazy(() => import('./components/OnboardingWizard'));
 const Budgets              = React.lazy(() => import('./components/Budgets'));
+const CompanyBranding      = React.lazy(() => import('./components/CompanyBranding'));
 
 const NAV = [
   // —— 1. GESTÃO DA AERONAVE —————————————————————————————————————————————————
@@ -536,7 +537,8 @@ export default function App() {
           {page==='missions'      && <Missions aircraft={filteredAircraft} reload={reload} onGenerateGD={() => setShowGD(true)} />}
           {page==='flights'       && <Flights flights={filteredFlights} aircraft={filteredAircraft} costs={filteredCosts} reload={reload} setPage={go} setPreselFlight={setPreselFlight} />}
           {page==='costs'         && <Costs costs={filteredCosts} aircraft={filteredAircraft} flights={filteredFlights} reload={reload} preselFlight={preselFlight} onScanReceipt={() => setShowReceipt(true)} />}
-          {page==='budgets'       && <Budgets aircraft={filteredAircraft} reload={reload} />}
+          {page==='budgets'       && <Budgets aircraft={filteredAircraft} reload={reload} setPage={go} />}
+          {page==='company_branding' && <CompanyBranding onClose={() => go('budgets')} />}
           {page==='flightcosts'   && <Costs costs={filteredCosts} aircraft={filteredAircraft} flights={filteredFlights} reload={reload} preselFlight={preselFlight} onScanReceipt={() => setShowReceipt(true)} initialFilter="flight" />}
           {page==='maintenance'   && <Maintenance maintenance={filteredMaint} aircraft={filteredAircraft} reload={reload} />}
           {page==='mxtimeline'    && <Maintenance maintenance={filteredMaint} aircraft={filteredAircraft} flights={filteredFlights} reload={reload} initialTab="timeline" />}

@@ -4,8 +4,9 @@ import {
   getBudgets, saveBudget, deleteBudget,
   getBudgetLines, saveBudgetLine, deleteBudgetLine,
   regenerateBudgetMonthly, getBudgetFollowup, cloneBudget,
-  runBudgetSnapshot, getBudgetSnapshots,
+  runBudgetSnapshot, getBudgetSnapshots, getCompanyProfile,
 } from '../store';
+import { downloadBudgetPdf } from './BudgetReportPDF';
 
 const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -46,7 +47,7 @@ function varianceColor(pct) {
   return 'var(--red)';                         // estouro
 }
 
-export default function Budgets({ aircraft = [], reload }) {
+export default function Budgets({ aircraft = [], reload, setPage }) {
   const [view, setView] = useState('list');   // 'list' | 'edit' | 'followup'
   const [budgets, setBudgets] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -85,7 +86,7 @@ export default function Budgets({ aircraft = [], reload }) {
   function back() { setView('list'); setEditing(null); setFollowupId(null); loadList(); }
 
   if (view === 'edit') return <BudgetEditor budget={editing} aircraft={aircraft} onBack={back} />;
-  if (view === 'followup') return <BudgetFollowup budgetId={followupId} onBack={back} />;
+  if (view === 'followup') return <BudgetFollowup budgetId={followupId} aircraft={aircraft} onBack={back} setPage={setPage} />;
 
   // ── LISTA ────────────────────────────────────────────────────
   const filtered = filterAc ? budgets.filter(b => b.aircraftId === filterAc) : budgets;
@@ -436,11 +437,12 @@ function BudgetMonthlyView({ budgetId, onRegenerate }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FOLLOWUP — planejado vs realizado
 // ─────────────────────────────────────────────────────────────────────────────
-function BudgetFollowup({ budgetId, onBack }) {
+function BudgetFollowup({ budgetId, aircraft, onBack, setPage }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [snapshots, setSnapshots] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     Promise.all([getBudgetFollowup(budgetId), getBudgetSnapshots(budgetId)])
@@ -457,6 +459,33 @@ function BudgetFollowup({ budgetId, onBack }) {
       alert(`Snapshot tirado: ${n} orçamento(s) processado(s).`);
     } catch(e) { alert('Erro: ' + e.message); }
     setBusy(false);
+  }
+
+  async function generatePdf() {
+    setPdfBusy(true);
+    try {
+      const company = await getCompanyProfile();
+      if (!company.name) {
+        if (!window.confirm('Configurações da empresa estão vazias. O PDF sairá sem logo/branding. Deseja prosseguir?')) {
+          setPdfBusy(false);
+          return;
+        }
+      }
+      const ac = aircraft?.find(a => a.id === data.budget.aircraftId);
+      const aircraftLabel = ac ? `${ac.registration} ${ac.manufacturer || ''} ${ac.model || ''}`.trim() : '—';
+      const today = new Date();
+      const currentMonth = today.getFullYear() === data.budget.fiscalYear ? today.getMonth()+1 : 12;
+      const monthSums = Array.from({length:12}, (_, m) => {
+        const planned = data.table.reduce((s, r) => s + r.months[m].planned, 0);
+        const actual = data.table.reduce((s, r) => s + r.months[m].actual, 0);
+        return { month: m+1, planned, actual };
+      });
+      await downloadBudgetPdf({
+        company, budget: data.budget, aircraftLabel,
+        table: data.table, monthSums, snapshots, currentMonth,
+      });
+    } catch(e) { alert('Erro ao gerar PDF: '+e.message); }
+    setPdfBusy(false);
   }
 
   if (loading || !data) return (
@@ -498,9 +527,13 @@ function BudgetFollowup({ budgetId, onBack }) {
           <div style={{ fontSize:16, fontWeight:700 }}>{budget.name}</div>
           <div style={{ fontSize:11, color:'var(--text3)' }}>Followup planejado × realizado · AF {budget.fiscalYear}</div>
         </div>
+        <button onClick={generatePdf} disabled={pdfBusy} className="primary" style={{ fontSize:12 }}>
+          📄 {pdfBusy ? 'Gerando…' : 'Gerar PDF'}
+        </button>
         <button onClick={takeSnapshot} disabled={busy} title="Congela um snapshot do mês anterior, gera alertas em custom_alerts. Roda automático no dia 1 às 03h Brasília via pg_cron." style={{ fontSize:12 }}>
           📸 {busy ? 'Processando…' : 'Snapshot agora'}
         </button>
+        {setPage && <button onClick={() => setPage('company_branding')} title="Personalizar logo e dados da empresa no PDF" style={{ fontSize:12 }}>⚙️ Branding</button>}
       </div>
 
       {/* KPI cards */}
