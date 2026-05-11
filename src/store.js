@@ -1360,6 +1360,16 @@ export async function uploadCompanyLogo(file) {
   return data?.publicUrl || null;
 }
 
+// Envia email do followup via edge function send-budget-email
+export async function sendBudgetEmail({ budgetId, recipientEmail, pdfBase64, pdfFilename }) {
+  const { data, error } = await supabase.functions.invoke('send-budget-email', {
+    body: { budgetId, recipientEmail, pdfBase64, pdfFilename },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error + (data.detail ? ' — '+JSON.stringify(data.detail) : ''));
+  return data;
+}
+
 // Dispara o snapshot mensal via RPC (mesma função que o cron usa)
 export async function runBudgetSnapshot() {
   const { data, error } = await supabase.rpc('run_budget_snapshot');

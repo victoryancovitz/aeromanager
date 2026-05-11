@@ -301,9 +301,14 @@ function MonthlyChart({ s, months, currentMonth, primary }) {
   );
 }
 
+// Helper: gera o blob do PDF
+export async function generateBudgetPdfBlob(props) {
+  return await pdf(<BudgetReportPDF {...props} />).toBlob();
+}
+
 // Helper: dispara download
 export async function downloadBudgetPdf(props) {
-  const blob = await pdf(<BudgetReportPDF {...props} />).toBlob();
+  const blob = await generateBudgetPdfBlob(props);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -312,4 +317,18 @@ export async function downloadBudgetPdf(props) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Helper: converte blob para base64 puro (sem prefixo data:)
+export function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      const base64 = typeof result === 'string' ? result.split(',')[1] : '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
