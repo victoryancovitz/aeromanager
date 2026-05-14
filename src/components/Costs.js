@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { saveCost, deleteCost, bulkUpdateCosts, bulkDeleteCosts, getCostCategories, listFinancialAccounts, uploadReceipt, getReceiptSignedUrl, removeReceipt } from '../store';
+import { saveCost, deleteCost, bulkUpdateCosts, bulkDeleteCosts, getCostCategories, listFinancialAccounts, uploadReceipt, getReceiptSignedUrl, removeReceipt, countInboxCosts } from '../store';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import CostInbox from './CostInbox';
 
 const CATS = [
   { v:'fuel',            label:'Combustível',            group:'op_direct',   costType:'variable', icon:'⛽' },
@@ -82,12 +83,19 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
   const [receiptBusy, setReceiptBusy] = useState(false);
   const [receiptErr, setReceiptErr]   = useState('');
   const [receiptUrl, setReceiptUrl]   = useState('');
+  const [inboxCount, setInboxCount]   = useState(0);
   const ms = useMultiSelect(costs);
 
   useEffect(() => {
     getCostCategories().then(setCustomCats).catch(() => {});
     listFinancialAccounts().then(setAccounts).catch(() => {});
+    countInboxCosts().then(setInboxCount).catch(() => {});
   }, []);
+
+  // Recarrega contador do inbox sempre que alguém aprova/rejeita
+  function refreshInboxCount() {
+    countInboxCosts().then(setInboxCount).catch(() => {});
+  }
 
   // All categories: built-in + custom
   const allCats = useMemo(() => [
@@ -441,11 +449,17 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
       </div>
 
       <div style={{ display:'flex', gap:4, marginBottom:16, background:'var(--bg2)', borderRadius:10, padding:4, width:'fit-content' }}>
-        {[['list','📋 Lista'],['analytics','📊 Análise'],['pricing','💡 Precificação']].map(([v,l]) => (
-          <button key={v} onClick={()=>setTab(v)} style={{ padding:'7px 16px', borderRadius:8, border:'none', fontSize:12, fontWeight:500, cursor:'pointer', background:tab===v?'var(--bg1)':'transparent', color:tab===v?'var(--text1)':'var(--text3)', boxShadow:tab===v?'0 1px 3px rgba(0,0,0,.15)':'' }}>{l}</button>
+        {[
+          ['list','📋 Lista'],
+          ['analytics','📊 Análise'],
+          ['pricing','💡 Precificação'],
+          ['inbox', `📥 Caixa de entrada${inboxCount > 0 ? ` (${inboxCount})` : ''}`],
+        ].map(([v,l]) => (
+          <button key={v} onClick={()=>setTab(v)} style={{ padding:'7px 16px', borderRadius:8, border:'none', fontSize:12, fontWeight:500, cursor:'pointer', background:tab===v?'var(--bg1)':'transparent', color: tab===v ? 'var(--text1)' : (v==='inbox' && inboxCount > 0 ? 'var(--amber)' : 'var(--text3)'), boxShadow:tab===v?'0 1px 3px rgba(0,0,0,.15)':'' }}>{l}</button>
         ))}
       </div>
 
+      {tab !== 'inbox' && (
       <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
         <select value={filterAc} onChange={e=>setFilterAc(e.target.value)} style={{ width:180 }}><option value="">Todas as aeronaves</option>{aircraft.map(ac=><option key={ac.id} value={ac.id}>{ac.registration}</option>)}</select>
         <select value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} style={{ width:180 }}><option value="">Todos os grupos</option>{Object.entries(GROUPS).map(([k,g])=><option key={k} value={k}>{g.label}</option>)}</select>
@@ -455,6 +469,11 @@ export default function Costs({ costs=[], aircraft=[], flights=[], reload, prese
         {(filterAc||filterGroup||filterType||filterFrom||filterTo) && <div style={{ padding:'6px 14px', background:'var(--blue-dim)', border:'1px solid var(--blue-mid)', borderRadius:8, fontSize:12, color:'var(--blue)', fontFamily:'var(--font-mono)' }}>{fmtBrl(totalFiltered)} ({filtered.length})</div>}
         {(filterAc||filterGroup||filterType||filterFrom||filterTo) && <button className="ghost" style={{ fontSize:11 }} onClick={()=>{setFilterAc('');setFilterGroup('');setFilterType('');setFilterFrom('');setFilterTo('');}}>✕ Limpar</button>}
       </div>
+      )}
+
+      {tab === 'inbox' && (
+        <CostInbox aircraft={aircraft} onChanged={() => { refreshInboxCount(); reload(); }} />
+      )}
 
       {tab === 'list' && (
         costs.length === 0 ? (

@@ -1,11 +1,13 @@
 // Budgets.js — módulo de Orçamento & Followup
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   getBudgets, saveBudget, deleteBudget,
   getBudgetLines, saveBudgetLine, deleteBudgetLine,
   regenerateBudgetMonthly, getBudgetFollowup, cloneBudget,
   runBudgetSnapshot, getBudgetSnapshots, getCompanyProfile,
   sendBudgetEmail,
+  submitBudgetForApproval, approveBudget, rejectBudget, archiveBudget,
+  getBudgetApprovalLog, getMyRolesOnAircraft,
 } from '../store';
 import { supabase } from '../supabase';
 import { downloadBudgetPdf, generateBudgetPdfBlob, blobToBase64 } from './BudgetReportPDF';
@@ -41,6 +43,27 @@ const fmtBRLShort = (v) => {
   return `R$${n.toFixed(0)}`;
 };
 
+// ── Status do workflow de aprovação ──────────────────────────
+const STATUS_META = {
+  draft:     { label: 'Rascunho',          color: '#888',     bg: '#88888822', icon: '📝', desc: 'Em construção pelo gestor.' },
+  submitted: { label: 'Aguardando',        color: '#e8a84a',  bg: '#e8a84a22', icon: '⏳', desc: 'Submetido — aguardando aprovação do dono.' },
+  approved:  { label: 'Aprovado',          color: '#3dbf8a',  bg: '#3dbf8a22', icon: '✓', desc: 'Aprovado pelo dono. Pronto para ativar.' },
+  active:    { label: 'Ativo',             color: '#4d9de0',  bg: '#4d9de022', icon: '●', desc: 'Em operação — usado para acompanhar realizado vs planejado.' },
+  rejected:  { label: 'Rejeitado',         color: '#ef4444',  bg: '#ef444422', icon: '✕', desc: 'Rejeitado pelo dono — revisar conforme motivo informado.' },
+  archived:  { label: 'Arquivado',         color: '#666',     bg: '#66666622', icon: '📦', desc: 'Encerrado / substituído por revisão.' },
+};
+
+function StatusBadge({ status, size = 'sm' }) {
+  const m = STATUS_META[status] || { label: status, color: '#888', bg: '#88888822', icon: '?' };
+  const pad = size === 'lg' ? '4px 12px' : '2px 8px';
+  const fs = size === 'lg' ? 12 : 10;
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:pad, borderRadius:10, background:m.bg, color:m.color, fontSize:fs, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em' }}>
+      <span>{m.icon}</span>{m.label}
+    </span>
+  );
+}
+
 function varianceColor(pct) {
   if (pct === null || pct === undefined) return 'var(--text3)';
   if (pct <= 0) return 'var(--green)';        // economia
@@ -70,7 +93,7 @@ export default function Budgets({ aircraft = [], reload, setPage }) {
       name: 'Novo orçamento',
       fiscalYear: new Date().getFullYear(),
       aircraftId: aircraft[0]?.id || null,
-      status: 'active',
+      status: 'draft',
       fxUsdBrl: 5.0,
       fuelUsdGal: 6.0,
       contingencyPct: 0.05,
@@ -133,7 +156,14 @@ export default function Budgets({ aircraft = [], reload, setPage }) {
                       AF {b.fiscalYear} · {ac ? ac.registration : 'sem aeronave'} · câmbio R$ {b.fxUsdBrl.toFixed(2)}
                     </div>
                   </div>
-                  <span className={`tag tag-${b.status==='active'?'ok':b.status==='draft'?'warn':'mono'}`}>{b.status}</span>
+                  <StatusBadge status={b.status} />
+                </div>
+                <div style={{ marginTop:2, fontSize:10, color:'var(--text3)', minHeight:14 }}>
+                  {b.status === 'submitted' && b.submittedAt && `Submetido em ${b.submittedAt.slice(0,10)}`}
+                  {b.status === 'approved' && b.approvedAt && `Aprovado em ${b.approvedAt.slice(0,10)}`}
+                  {b.status === 'active' && b.approvedAt && `Aprovado em ${b.approvedAt.slice(0,10)} · em operação`}
+                  {b.status === 'rejected' && `Rejeitado: ${b.rejectionReason || '—'}`}
+                  {b.status === 'draft' && 'Em construção'}
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:12, fontSize:11 }}>
                   <div><div style={{ color:'var(--text3)' }}>Horas/ano</div><div style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{b.hoursYearAssumed}</div></div>
@@ -161,6 +191,186 @@ export default function Budgets({ aircraft = [], reload, setPage }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVAL BAR — workflow visual no editor
+// ─────────────────────────────────────────────────────────────────────────────
+function ApprovalBar({ budget, onChange }) {
+  const [myRoles, setMyRoles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [showApprove, setShowApprove] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [comment, setComment] = useState('');
+  const [reason, setReason] = useState('');
+  const [auditLog, setAuditLog] = useState([]);
+  const [showLog, setShowLog] = useState(false);
+
+  useEffect(() => {
+    if (budget?.aircraftId) {
+      getMyRolesOnAircraft(budget.aircraftId).then(setMyRoles).catch(() => setMyRoles([]));
+    }
+    if (budget?.id) {
+      getBudgetApprovalLog(budget.id).then(setAuditLog).catch(() => setAuditLog([]));
+    }
+  }, [budget?.id, budget?.aircraftId]);
+
+  if (!budget || !budget.id) return null; // só faz sentido depois de salvo
+
+  const roles = myRoles.map(r => r.role);
+  const isOwner   = roles.includes('owner') || roles.includes('co_owner');
+  const isManager = roles.includes('manager') || isOwner;
+  const status = budget.status || 'draft';
+  const meta = STATUS_META[status];
+
+  const canSubmit  = isManager && (status === 'draft' || status === 'rejected');
+  const canApprove = isOwner   && status === 'submitted';
+  const canReject  = isOwner   && status === 'submitted';
+  const canArchive = isOwner   && (status === 'active' || status === 'approved');
+
+  const myRoleLabel = isOwner ? 'Dono' : isManager ? 'Gestor' : 'Visualizador';
+
+  async function refresh() {
+    try {
+      if (onChange) await onChange();
+      const log = await getBudgetApprovalLog(budget.id);
+      setAuditLog(log);
+    } catch(e) { console.error(e); }
+  }
+
+  async function handleSubmit() {
+    setBusy(true);
+    try {
+      await submitBudgetForApproval(budget.id, { comment: comment || null, actorRole: roles[0] });
+      setComment('');
+      await refresh();
+    } catch(e) { alert('Erro: '+e.message); }
+    setBusy(false);
+  }
+
+  async function handleApprove() {
+    setBusy(true);
+    try {
+      await approveBudget(budget.id, { comment: comment || null, activate: true, actorRole: roles[0] });
+      setShowApprove(false); setComment('');
+      await refresh();
+    } catch(e) { alert('Erro: '+e.message); }
+    setBusy(false);
+  }
+
+  async function handleReject() {
+    if (!reason.trim()) { alert('Motivo é obrigatório.'); return; }
+    setBusy(true);
+    try {
+      await rejectBudget(budget.id, { reason, actorRole: roles[0] });
+      setShowReject(false); setReason('');
+      await refresh();
+    } catch(e) { alert('Erro: '+e.message); }
+    setBusy(false);
+  }
+
+  async function handleArchive() {
+    if (!window.confirm('Arquivar este orçamento? Ele sai de operação.')) return;
+    setBusy(true);
+    try {
+      await archiveBudget(budget.id, { actorRole: roles[0] });
+      await refresh();
+    } catch(e) { alert('Erro: '+e.message); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="card animate-in" style={{ padding:14, marginBottom:16, borderLeft:`4px solid ${meta.color}`, background:meta.bg }}>
+      <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <StatusBadge status={status} size="lg" />
+        <div style={{ fontSize:12, color:'var(--text2)', flex:1, minWidth:200 }}>
+          <div style={{ fontWeight:500 }}>{meta.desc}</div>
+          <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>
+            Você está como <strong>{myRoleLabel}</strong>
+            {status === 'submitted' && budget.submittedAt && ` · Submetido em ${budget.submittedAt.slice(0,10)}`}
+            {(status === 'active' || status === 'approved') && budget.approvedAt && ` · Aprovado em ${budget.approvedAt.slice(0,10)}`}
+            {status === 'rejected' && budget.rejectedAt && ` · Rejeitado em ${budget.rejectedAt.slice(0,10)}`}
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {canSubmit && (
+            <button className="primary" disabled={busy} onClick={handleSubmit} style={{ fontSize:12 }}>
+              📤 Submeter pra aprovação
+            </button>
+          )}
+          {canApprove && (
+            <button className="primary" disabled={busy} onClick={() => setShowApprove(true)} style={{ fontSize:12, background:'#3dbf8a' }}>
+              ✓ Aprovar
+            </button>
+          )}
+          {canReject && (
+            <button className="danger" disabled={busy} onClick={() => setShowReject(true)} style={{ fontSize:12 }}>
+              ✕ Rejeitar
+            </button>
+          )}
+          {canArchive && (
+            <button disabled={busy} onClick={handleArchive} style={{ fontSize:12 }}>
+              📦 Arquivar
+            </button>
+          )}
+          {auditLog.length > 0 && (
+            <button onClick={() => setShowLog(s => !s)} style={{ fontSize:12 }}>
+              🕘 Histórico ({auditLog.length})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {status === 'rejected' && budget.rejectionReason && (
+        <div style={{ marginTop:10, padding:10, background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.3)', borderRadius:6, fontSize:12 }}>
+          <strong style={{ color:'var(--red)' }}>Motivo da rejeição:</strong> {budget.rejectionReason}
+        </div>
+      )}
+
+      {showApprove && (
+        <div style={{ marginTop:12, padding:12, background:'var(--bg0)', border:'1px solid #3dbf8a', borderRadius:6 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Aprovar orçamento (comentário opcional):</div>
+          <input value={comment} onChange={e=>setComment(e.target.value)} placeholder="ex.: Aprovado conforme reunião 14/05" style={{ width:'100%', marginBottom:8 }} />
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="primary" disabled={busy} onClick={handleApprove} style={{ fontSize:12, background:'#3dbf8a' }}>Confirmar aprovação</button>
+            <button onClick={() => { setShowApprove(false); setComment(''); }} style={{ fontSize:12 }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {showReject && (
+        <div style={{ marginTop:12, padding:12, background:'var(--bg0)', border:'1px solid var(--red)', borderRadius:6 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Motivo da rejeição (obrigatório):</div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Explique o que precisa ser revisado…" rows={3} style={{ width:'100%', marginBottom:8 }} />
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="danger" disabled={busy || !reason.trim()} onClick={handleReject} style={{ fontSize:12 }}>Confirmar rejeição</button>
+            <button onClick={() => { setShowReject(false); setReason(''); }} style={{ fontSize:12 }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {showLog && (
+        <div style={{ marginTop:12, padding:10, background:'var(--bg0)', border:'1px solid var(--border)', borderRadius:6, maxHeight:240, overflowY:'auto' }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6, textTransform:'uppercase', letterSpacing:'.05em' }}>Trilha de auditoria</div>
+          {auditLog.map(log => (
+            <div key={log.id} style={{ display:'flex', gap:10, padding:'6px 0', borderBottom:'1px solid var(--border)', fontSize:11 }}>
+              <div style={{ minWidth:120, fontFamily:'var(--font-mono)', color:'var(--text3)' }}>
+                {new Date(log.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+              </div>
+              <div style={{ flex:1 }}>
+                <div>
+                  <strong style={{ color:STATUS_META[log.action]?.color || 'var(--text1)' }}>{log.action}</strong>
+                  {log.actor_role && <span style={{ color:'var(--text3)', marginLeft:6 }}>· {log.actor_role}</span>}
+                </div>
+                {log.comment && <div style={{ color:'var(--text2)', marginTop:2 }}>{log.comment}</div>}
+              </div>
+            </div>
+          ))}
+          {auditLog.length === 0 && <div style={{ color:'var(--text3)', fontSize:11 }}>Sem histórico ainda.</div>}
         </div>
       )}
     </div>
@@ -246,6 +456,25 @@ function BudgetEditor({ budget, aircraft, onBack }) {
           Total/ano: <span style={{ color:'var(--blue)', fontFamily:'var(--font-mono)', fontWeight:600 }}>{fmtBRL(totalAnual)}</span>
         </div>
       </div>
+
+      <ApprovalBar
+        budget={form}
+        onChange={async () => {
+          // Recarrega o budget do banco pra refletir status atualizado
+          try {
+            const { data } = await supabase.from('budgets').select('*').eq('id', savedId).single();
+            if (data) {
+              setForm(f => ({ ...f,
+                status: data.status,
+                submittedAt: data.submitted_at, submittedBy: data.submitted_by,
+                approvedAt: data.approved_at, approvedBy: data.approved_by,
+                rejectedAt: data.rejected_at, rejectedBy: data.rejected_by,
+                rejectionReason: data.rejection_reason,
+              }));
+            }
+          } catch(e) { console.error(e); }
+        }}
+      />
 
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid var(--bg2)' }}>
         {[

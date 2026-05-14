@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { getAircraft, getFlights, getMissions, saveCost, saveCostForJourney, recordFuelPrice, getSettings } from '../store';
+import { getAircraft, getFlights, getMissions, saveCost, saveCostForJourney, recordFuelPrice, getSettings, submitCostToInbox } from '../store';
 
 const CATEGORIES = {
   fuel: 'Combustível', hangar: 'Hangar / Tie-down', insurance: 'Seguro',
@@ -202,6 +202,38 @@ export default function ReceiptScanner({ onClose, onSaved }) {
     setLoading(false);
   }
 
+  // Envia para o inbox sem aprovar — útil pra fluxo "scaneia agora, revisa depois"
+  // ou pra deixar outro stakeholder (gestor) aprovar.
+  // Se houver regra com auto_apply ativo que case, o store pula o inbox.
+  async function saveToInbox() {
+    if (!extracted) return;
+    setLoading(true); setError('');
+    try {
+      const cost = {
+        aircraftId:    form.aircraftId || null,
+        flightId:      form.flightId   || null,
+        missionId:     form.missionId  || null,
+        category:      extracted.category || 'other',
+        costType:      'variable',
+        amountBrl:     parseFloat(extracted.amount) || 0,
+        description:   extracted.description || extracted.vendor || 'Recibo digitalizado',
+        referenceDate: extracted.date || new Date().toISOString().slice(0, 10),
+        vendor:        extracted.vendor || '',
+        cnpj:          extracted.cnpj_vendor || null,
+        invoiceNumber: extracted.invoice_number || null,
+        submittedVia:  'scan',
+        aiExtracted:   extracted,
+        aiConfidence:  extracted.confidence || null,
+      };
+      await submitCostToInbox(cost);
+      onSaved?.();
+      setStep('done');
+    } catch (e) {
+      setError(`Erro ao enviar para inbox: ${e.message}`);
+    }
+    setLoading(false);
+  }
+
   function upd(k, v) { setExtracted(e => ({ ...e, [k]: v })); }
 
   // Filter flights/missions by selected aircraft
@@ -400,11 +432,17 @@ export default function ReceiptScanner({ onClose, onSaved }) {
               )}
             </div>
 
-            <div style={{ display:'flex', gap:10, marginTop:18 }}>
-              <button className="primary" onClick={save} disabled={loading} style={{ flex:1, padding:'12px' }}>
+            <div style={{ display:'flex', gap:10, marginTop:18, flexWrap:'wrap' }}>
+              <button className="primary" onClick={save} disabled={loading} style={{ flex:'1 1 200px', padding:'12px' }}>
                 {loading ? 'Salvando...' : '✓ Lançar despesa'}
               </button>
+              <button onClick={saveToInbox} disabled={loading} style={{ flex:'1 1 200px', padding:'12px', background:'var(--bg2)', border:'1px solid var(--amber-mid)', color:'var(--amber)' }} title="Salva como pendente — você (ou outro stakeholder) revisa depois na Caixa de entrada">
+                {loading ? 'Enviando...' : '📥 Enviar para inbox'}
+              </button>
               <button onClick={() => setStep('preview')}>← Voltar</button>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, textAlign: 'center' }}>
+              "Lançar despesa" entra direto na lista oficial · "Enviar para inbox" fica pendente de revisão
             </div>
           </div>
         )}

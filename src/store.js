@@ -168,9 +168,11 @@ async function updateAircraftHours(aircraftId) {
 
 // ── Costs ─────────────────────────────────────────────────────
 export async function getCosts() {
+  // Por padrão retorna apenas custos aprovados — pendentes ficam no Inbox
   const { data, error } = await supabase
     .from('costs')
     .select('*')
+    .eq('status', 'approved')
     .order('reference_date', { ascending: false });
   if (error) throw error;
   return (data || []).map(fromDB_cost);
@@ -219,6 +221,159 @@ export async function bulkDeleteCosts(ids) {
   if (!user) throw new Error('Não autenticado');
   const { error } = await supabase.from('costs').delete().in('id', ids).eq('user_id', user.id);
   if (error) throw error;
+}
+
+// ── Cost Inbox ────────────────────────────────────────────────
+// Custos pendentes de revisão (origem: scan, e-mail, whatsapp ou api).
+// O fluxo manual via formulário web continua salvando direto como 'approved'.
+export async function listInboxCosts() {
+  const { data, error } = await supabase
+    .from('costs')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(fromDB_cost);
+}
+
+export async function countInboxCosts() {
+  const { count, error } = await supabase
+    .from('costs')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+  if (error) return 0;
+  return count || 0;
+}
+
+export async function approveCost(id, patch = {}) {
+  // patch pode trazer ajustes feitos no review (categoria, valor, etc.)
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const dbPatch = patch.id ? toDB_cost(patch, user.id) : {};
+  delete dbPatch.user_id; delete dbPatch.id;
+  dbPatch.status = 'approved';
+  dbPatch.reviewed_at = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('costs').update(dbPatch).eq('id', id).select().single();
+  if (error) throw error;
+  return fromDB_cost(data);
+}
+
+export async function rejectCost(id) {
+  const { error } = await supabase
+    .from('costs')
+    .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Submete um custo direto pra inbox (status=pending). Usado pelo
+// ReceiptScanner quando o usuário escolhe "enviar para inbox sem revisar"
+// e futuramente pelos canais e-mail/WhatsApp.
+//
+// Se já existir regra com auto_apply=true que case com vendor/cnpj/descrição,
+// o custo é aplicado direto como 'approved' (bypass do inbox).
+export async function submitCostToInbox(c) {
+  const rule = await findMatchingRule({
+    vendor: c.vendor, cnpj: c.cnpj, description: c.description,
+  }).catch(() => null);
+
+  if (rule) {
+    const patched = {
+      ...c,
+      category:        rule.suggested_category    || c.category,
+      categoryId:      rule.suggested_category_id || c.categoryId,
+      costType:        rule.suggested_cost_type   || c.costType,
+      recurrence:      rule.suggested_recurrence  || c.recurrence,
+      aiAppliedRuleId: rule.id,
+    };
+    await bumpRuleHit(rule.id).catch(() => {});
+    if (rule.auto_apply) {
+      // Pula o inbox — vai direto pra lista oficial
+      return saveCost({
+        ...patched,
+        submittedVia: c.submittedVia || 'scan',
+        status:       'approved',
+        reviewedAt:   new Date().toISOString(),
+      });
+    }
+    return saveCost({ ...patched, status: 'pending', submittedVia: c.submittedVia || 'scan' });
+  }
+
+  return saveCost({ ...c, status: 'pending', submittedVia: c.submittedVia || 'scan' });
+}
+
+// ── Categorization Rules ──────────────────────────────────────
+export async function listCategorizationRules() {
+  const { data, error } = await supabase
+    .from('categorization_rules')
+    .select('*')
+    .order('hit_count', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveCategorizationRule(rule) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const row = {
+    user_id:               user.id,
+    match_type:            rule.matchType,
+    match_value:           rule.matchValue,
+    suggested_category:    rule.suggestedCategory || null,
+    suggested_category_id: rule.suggestedCategoryId || null,
+    suggested_cost_type:   rule.suggestedCostType || null,
+    suggested_recurrence:  rule.suggestedRecurrence || null,
+    suggested_split_rule:  rule.suggestedSplitRule || null,
+    auto_apply:            !!rule.autoApply,
+    updated_at:            new Date().toISOString(),
+  };
+  if (rule.id) {
+    const { data, error } = await supabase
+      .from('categorization_rules').update(row).eq('id', rule.id).select().single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('categorization_rules').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+export async function deleteCategorizationRule(id) {
+  const { error } = await supabase.from('categorization_rules').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Procura regra que case com vendor/cnpj/descrição.
+// Retorna a regra de maior hit_count, ou null.
+export async function findMatchingRule({ vendor, cnpj, description }) {
+  const rules = await listCategorizationRules();
+  const v = (vendor || '').trim().toUpperCase();
+  const c = (cnpj || '').replace(/\D/g, '');
+  const d = (description || '').toLowerCase();
+  for (const r of rules) {
+    const mv = (r.match_value || '').trim().toUpperCase();
+    if (r.match_type === 'vendor_exact'    && v && v === mv)            return r;
+    if (r.match_type === 'vendor_contains' && v && v.includes(mv))      return r;
+    if (r.match_type === 'cnpj'            && c && c === mv.replace(/\D/g,'')) return r;
+    if (r.match_type === 'description_contains' && d && d.includes(r.match_value.toLowerCase())) return r;
+  }
+  return null;
+}
+
+// Incrementa o contador de uso de uma regra (chamar quando aplica).
+export async function bumpRuleHit(ruleId) {
+  if (!ruleId) return;
+  await supabase.rpc('increment_rule_hit', { rule_id: ruleId }).then(() => {}, async () => {
+    // Fallback se a função RPC não existir: faz UPDATE direto.
+    const { data } = await supabase.from('categorization_rules').select('hit_count').eq('id', ruleId).single();
+    await supabase.from('categorization_rules').update({
+      hit_count: (data?.hit_count || 0) + 1,
+      last_hit_at: new Date().toISOString(),
+    }).eq('id', ruleId);
+  });
 }
 
 export async function bulkUpdateComponents(ids, patch) {
@@ -785,6 +940,12 @@ function toDB_cost(c, userId) {
     paid_by:          c.paidBy || null,
     reimbursable:     !!c.reimbursable,
     reimbursed_at:    c.reimbursedAt || null,
+    status:           c.status || 'approved',
+    submitted_via:    c.submittedVia || 'web',
+    ai_extracted:     c.aiExtracted || null,
+    ai_confidence:    c.aiConfidence || null,
+    ai_applied_rule_id: c.aiAppliedRuleId || null,
+    reviewed_at:      c.reviewedAt || null,
   };
 }
 
@@ -820,6 +981,13 @@ function fromDB_cost(r) {
     paidBy:         r.paid_by || null,
     reimbursable:   !!r.reimbursable,
     reimbursedAt:   r.reimbursed_at || null,
+    status:         r.status || 'approved',
+    submittedVia:   r.submitted_via || 'web',
+    aiExtracted:    r.ai_extracted || null,
+    aiConfidence:   r.ai_confidence || null,
+    aiAppliedRuleId: r.ai_applied_rule_id || null,
+    reviewedAt:     r.reviewed_at || null,
+    createdAt:      r.created_at || null,
   };
 }
 
@@ -1354,6 +1522,12 @@ const fromBudget = r => ({
   flightsYearAssumed: parseInt(r.flights_year_assumed)||0,
   overnightsYearAssumed: parseInt(r.overnights_year_assumed)||0,
   seasonality: r.seasonality||{}, notes: r.notes,
+  // Approval workflow
+  submittedAt: r.submitted_at, submittedBy: r.submitted_by,
+  approvedAt: r.approved_at, approvedBy: r.approved_by,
+  rejectedAt: r.rejected_at, rejectedBy: r.rejected_by,
+  rejectionReason: r.rejection_reason,
+  parentBudgetId: r.parent_budget_id, revisionLabel: r.revision_label,
   createdAt: r.created_at, updatedAt: r.updated_at,
 });
 const fromLine = r => ({
@@ -1596,6 +1770,320 @@ export async function getBudgetSnapshots(budgetId) {
   if (error) throw error;
   return data || [];
 }
+
+// ── Aircraft Stakeholders (Multi-stakeholder Fase A) ──────────
+// Estrutura: aircraft_stakeholders (aircraft_id, user_id, role, permissions JSONB, …)
+// Roles: owner | co_owner | manager | pilot | mechanic | cabin_crew | viewer
+// RLS atual aplica-se SÓ a estas tabelas novas; flights/costs/missions ainda usam auth.uid()=user_id.
+
+const STAKEHOLDER_ROLES = ['owner','co_owner','manager','pilot','mechanic','cabin_crew','viewer'];
+
+function fromDB_stakeholder(r) {
+  return {
+    id: r.id,
+    aircraftId: r.aircraft_id,
+    userId: r.user_id,
+    displayName: r.display_name,
+    email: r.email,
+    role: r.role,
+    permissions: r.permissions || {},
+    sharePct: r.share_pct,
+    invitedBy: r.invited_by,
+    invitedAt: r.invited_at,
+    joinedAt: r.joined_at,
+    leftAt: r.left_at,
+    notes: r.notes,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export async function listStakeholders(aircraftId) {
+  let q = supabase.from('aircraft_stakeholders').select('*').is('left_at', null);
+  if (aircraftId) q = q.eq('aircraft_id', aircraftId);
+  const { data, error } = await q.order('role').order('display_name');
+  if (error) throw error;
+  return (data || []).map(fromDB_stakeholder);
+}
+
+export async function getMyRolesOnAircraft(aircraftId) {
+  const user = await getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('aircraft_stakeholders')
+    .select('role, permissions')
+    .eq('aircraft_id', aircraftId)
+    .eq('user_id', user.id)
+    .is('left_at', null);
+  if (error) throw error;
+  return (data || []).map(r => ({ role: r.role, permissions: r.permissions || {} }));
+}
+
+export async function getMyAircraftRoles() {
+  const user = await getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('aircraft_stakeholders')
+    .select('aircraft_id, role, permissions')
+    .eq('user_id', user.id)
+    .is('left_at', null);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function hasRoleOnAircraft(aircraftId, rolesAllowed) {
+  const roles = await getMyRolesOnAircraft(aircraftId);
+  const allowed = Array.isArray(rolesAllowed) ? rolesAllowed : [rolesAllowed];
+  return roles.some(r => allowed.includes(r.role));
+}
+
+export async function saveStakeholder(s) {
+  if (!STAKEHOLDER_ROLES.includes(s.role)) {
+    throw new Error(`Role inválida: ${s.role}. Use: ${STAKEHOLDER_ROLES.join(', ')}`);
+  }
+  const row = {
+    aircraft_id: s.aircraftId,
+    user_id: s.userId || null,
+    display_name: s.displayName,
+    email: s.email || null,
+    role: s.role,
+    permissions: s.permissions || {},
+    share_pct: s.sharePct ?? null,
+    notes: s.notes || null,
+  };
+  if (s.id) {
+    const { data, error } = await supabase.from('aircraft_stakeholders').update(row).eq('id', s.id).select().single();
+    if (error) throw error;
+    return fromDB_stakeholder(data);
+  } else {
+    const { data, error } = await supabase.from('aircraft_stakeholders').insert(row).select().single();
+    if (error) throw error;
+    return fromDB_stakeholder(data);
+  }
+}
+
+export async function removeStakeholder(id) {
+  // Soft-remove: marca left_at, não deleta histórico
+  const { error } = await supabase
+    .from('aircraft_stakeholders')
+    .update({ left_at: new Date().toISOString().slice(0,10) })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ── Stakeholder Invites (magic-link) ──────────────────────────
+function generateInviteToken() {
+  // 32 chars hex random
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, b => b.toString(16).padStart(2,'0')).join('');
+}
+
+export async function inviteStakeholder({ aircraftId, email, displayName, role, message, expiresInDays = 14 }) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  if (!STAKEHOLDER_ROLES.includes(role)) {
+    throw new Error(`Role inválida: ${role}`);
+  }
+  const token = generateInviteToken();
+  const expiresAt = new Date(Date.now() + expiresInDays*24*60*60*1000).toISOString();
+  const { data, error } = await supabase
+    .from('stakeholder_invites')
+    .insert({
+      aircraft_id: aircraftId,
+      email: email.toLowerCase().trim(),
+      display_name: displayName,
+      role, token,
+      expires_at: expiresAt,
+      invited_by: user.id,
+      message: message || null,
+    })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listInvites(aircraftId) {
+  let q = supabase.from('stakeholder_invites').select('*');
+  if (aircraftId) q = q.eq('aircraft_id', aircraftId);
+  const { data, error } = await q.order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function revokeInvite(id) {
+  const { error } = await supabase
+    .from('stakeholder_invites')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function acceptStakeholderInvite(token) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado — faça login antes de aceitar o convite');
+  const { data: inv, error: invErr } = await supabase
+    .from('stakeholder_invites')
+    .select('*')
+    .eq('token', token)
+    .is('accepted_at', null)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+  if (invErr) throw invErr;
+  if (!inv) throw new Error('Convite inválido, expirado ou já aceito');
+  // Cria stakeholder
+  const sh = await saveStakeholder({
+    aircraftId: inv.aircraft_id,
+    userId: user.id,
+    displayName: inv.display_name || user.email,
+    email: inv.email,
+    role: inv.role,
+  });
+  // Marca aceito
+  await supabase.from('stakeholder_invites')
+    .update({ accepted_at: new Date().toISOString(), accepted_by: user.id })
+    .eq('id', inv.id);
+  return sh;
+}
+
+// ── Budget Approval Workflow ──────────────────────────────────
+// Estados: draft → submitted → (approved|rejected) → active → archived
+//   draft     — gestor monta
+//   submitted — aguardando dono
+//   approved  — dono aprovou (ainda não ativado)
+//   active    — em operação (também legacy)
+//   rejected  — dono rejeitou (com motivo)
+//   archived  — encerrado / revisado
+//
+// Permissões esperadas (validadas no UI; RLS dos budgets em si fica para Fase B):
+//   submit  → manager + owner + co_owner
+//   approve → owner + co_owner
+//   reject  → owner + co_owner
+//   revise  → manager + owner + co_owner (cria filho com parent_budget_id)
+
+const BUDGET_STATES = ['draft','submitted','approved','active','rejected','archived'];
+
+async function logBudgetAction(budgetId, action, { actorRole, comment, payload } = {}) {
+  const user = await getUser();
+  if (!user) return;
+  try {
+    await supabase.from('budget_approval_log').insert({
+      budget_id: budgetId,
+      action,
+      actor_id: user.id,
+      actor_role: actorRole || null,
+      comment: comment || null,
+      payload: payload || {},
+    });
+  } catch(e) {
+    // Audit log não deve quebrar a operação — apenas warn no console
+    console.warn('budget_approval_log insert falhou:', e.message);
+  }
+}
+
+export async function getBudgetApprovalLog(budgetId) {
+  const { data, error } = await supabase
+    .from('budget_approval_log')
+    .select('*')
+    .eq('budget_id', budgetId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function setBudgetStatus(budgetId, patch) {
+  const { data, error } = await supabase
+    .from('budgets')
+    .update(patch)
+    .eq('id', budgetId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function submitBudgetForApproval(budgetId, { comment, actorRole } = {}) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const b = await getBudget(budgetId);
+  if (!b) throw new Error('Budget não encontrado');
+  if (!['draft','rejected'].includes(b.status)) {
+    throw new Error(`Não pode submeter um budget em status "${b.status}". Só draft ou rejected.`);
+  }
+  const updated = await setBudgetStatus(budgetId, {
+    status: 'submitted',
+    submitted_at: new Date().toISOString(),
+    submitted_by: user.id,
+    rejected_at: null,
+    rejected_by: null,
+    rejection_reason: null,
+  });
+  await logBudgetAction(budgetId, 'submit', { actorRole, comment });
+  return fromBudget(updated);
+}
+
+export async function approveBudget(budgetId, { comment, activate = true, actorRole } = {}) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const b = await getBudget(budgetId);
+  if (!b) throw new Error('Budget não encontrado');
+  if (b.status !== 'submitted') {
+    throw new Error(`Só pode aprovar budgets em "submitted". Atual: "${b.status}".`);
+  }
+  const updated = await setBudgetStatus(budgetId, {
+    status: activate ? 'active' : 'approved',
+    approved_at: new Date().toISOString(),
+    approved_by: user.id,
+  });
+  await logBudgetAction(budgetId, 'approve', { actorRole, comment });
+  if (activate) await logBudgetAction(budgetId, 'activate', { actorRole, comment: 'Ativado automaticamente após aprovação' });
+  return fromBudget(updated);
+}
+
+export async function rejectBudget(budgetId, { reason, actorRole } = {}) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  if (!reason || !reason.trim()) throw new Error('Motivo da rejeição é obrigatório');
+  const b = await getBudget(budgetId);
+  if (!b) throw new Error('Budget não encontrado');
+  if (b.status !== 'submitted') {
+    throw new Error(`Só pode rejeitar budgets em "submitted". Atual: "${b.status}".`);
+  }
+  const updated = await setBudgetStatus(budgetId, {
+    status: 'rejected',
+    rejected_at: new Date().toISOString(),
+    rejected_by: user.id,
+    rejection_reason: reason.trim(),
+  });
+  await logBudgetAction(budgetId, 'reject', { actorRole, comment: reason.trim() });
+  return fromBudget(updated);
+}
+
+export async function archiveBudget(budgetId, { comment, actorRole } = {}) {
+  const updated = await setBudgetStatus(budgetId, { status: 'archived' });
+  await logBudgetAction(budgetId, 'archive', { actorRole, comment });
+  return fromBudget(updated);
+}
+
+export async function reviseBudget(parentBudgetId, { label, actorRole, comment } = {}) {
+  // Clona como filho (revisão), começa em draft. Não ativa o parent.
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const parent = await getBudget(parentBudgetId);
+  if (!parent) throw new Error('Budget pai não encontrado');
+  const child = await cloneBudget(parentBudgetId, parent.fiscalYear, 0, 0); // mesma base, mesmos números
+  await setBudgetStatus(child.id, {
+    status: 'draft',
+    parent_budget_id: parentBudgetId,
+    revision_label: label || `Revisão de ${parent.name}`,
+    name: `${parent.name} — ${label || 'Revisão'}`,
+  });
+  await logBudgetAction(child.id, 'revise', { actorRole, comment: comment || `Filho de ${parent.name}` });
+  return await getBudget(child.id);
+}
+
+export { BUDGET_STATES };
 
 // Followup: planejado vs realizado por mês e categoria
 export async function getBudgetFollowup(budgetId) {

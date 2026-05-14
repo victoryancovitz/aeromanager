@@ -62,6 +62,7 @@ async function getCostsForPeriod(aircraftId, start, end) {
     .from('costs')
     .select('*')
     .eq('aircraft_id', aircraftId)
+    .eq('status', 'approved')
     .gte('reference_date', start)
     .lte('reference_date', end)
     .neq('split_rule', 'exempt')
