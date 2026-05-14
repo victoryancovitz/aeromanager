@@ -1335,6 +1335,62 @@ export async function deleteMissionFuelQuote(id) {
   if (error) throw error;
 }
 
+// ── Mission Costs (planned vs actual) ────────────────────────
+
+// Lista os custos REAIS lançados pra uma missão.
+// Considera duas vias: costs.mission_id direto + costs vinculadas a flights da missão (legacy).
+export async function getMissionCosts(missionId, aircraftId) {
+  // Direct match by mission_id
+  const { data: direct, error: e1 } = await supabase
+    .from('costs')
+    .select('*')
+    .eq('mission_id', missionId);
+  if (e1) throw e1;
+
+  // Legacy: custos linkados via flight_id dos legs (alguns dados antigos)
+  // Sem buscar legs aqui pra simplicidade — o caller pode passar flightIds se precisar
+  return (direct || []).map(c => ({
+    id: c.id,
+    referenceDate: c.reference_date,
+    category: c.category,
+    description: c.description,
+    vendor: c.vendor,
+    amountBrl: parseFloat(c.amount_brl) || 0,
+    amountUsd: parseFloat(c.amount_usd) || null,
+    currency: c.currency,
+    receiptUrl: c.receipt_url,
+    status: c.status,
+    paidBy: c.paid_by,
+    reimbursable: c.reimbursable,
+    flightId: c.flight_id,
+  }));
+}
+
+// Lançamento rápido de custo de uma missão. Pré-preenche mission_id, aircraft_id.
+export async function quickAddCostToMission({ missionId, aircraftId, category, amountBrl, amountUsd, currency, vendor, description, referenceDate, receiptUrl }) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const row = {
+    user_id: user.id,
+    aircraft_id: aircraftId || null,
+    mission_id: missionId,
+    category: category || 'other',
+    cost_type: 'variable',
+    amount_brl: amountBrl || 0,
+    amount_usd: amountUsd || null,
+    currency: currency || 'BRL',
+    vendor: vendor || null,
+    description: description || null,
+    reference_date: referenceDate || new Date().toISOString().slice(0,10),
+    receipt_url: receiptUrl || null,
+    status: 'approved',
+    submitted_via: 'web',
+  };
+  const { data, error } = await supabase.from('costs').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
 // ── Mission Doc Snapshots ────────────────────────────────────
 export async function getMissionDocSnapshots(missionId) {
   const { data, error } = await supabase

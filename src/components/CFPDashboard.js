@@ -10,8 +10,10 @@ import {
   CHECKLIST_TYPE_LABELS,
   getMissionFuelQuotes, saveMissionFuelQuote, chooseFuelQuote, deleteMissionFuelQuote,
   getMissionDocSnapshots, snapshotMissionDocs,
+  getMissionCosts, quickAddCostToMission,
 } from '../store';
 import { supabase } from '../supabase';
+import CategoryInput from './CategoryInput';
 
 const OPERATION_TYPES = [
   { v: 'private_part91',     l: 'Privado (Part 91)' },
@@ -133,12 +135,13 @@ export default function CFPDashboard({ missionId, onClose }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid var(--bg2)' }}>
+      <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid var(--bg2)', overflowX:'auto' }}>
         {[
           { id:'summary',   label:'📋 Resumo' },
-          { id:'checklist', label:'✓ Checklist por leg' },
-          { id:'fuel',      label:'⛽ Fuel Planning' },
-          { id:'validity',  label:'📅 Validades (Crew & MX)' },
+          { id:'checklist', label:'✓ Checklist' },
+          { id:'fuel',      label:'⛽ Fuel' },
+          { id:'validity',  label:'📅 Validades' },
+          { id:'costs',     label:'💰 Custos' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding:'8px 16px', border:'none', background:'transparent',
@@ -164,6 +167,276 @@ export default function CFPDashboard({ missionId, onClose }) {
       {tab === 'fuel' && <FuelTab mission={m} />}
 
       {tab === 'validity' && <ValidityTab mission={m} />}
+
+      {tab === 'costs' && <CustosTab mission={m} />}
+    </div>
+  );
+}
+
+// ── Custos Tab — Planejado × Realizado ────────────────────────────────────
+const QUICK_COST_CATS = ['Combustível Jet-A1','Hotel Tripulação','Per Diem Tripulação','Catering','Handling Fee','Taxa Aeroportuária','Suprimentos de Bordo','Gorjetas / Tips','De-icing'];
+
+function CustosTab({ mission }) {
+  const [costs, setCosts] = useState([]);
+  const [quotes, setQuotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [fx, setFx] = useState(5.2); // câmbio USD/BRL default
+  const [form, setForm] = useState({
+    category: '',
+    amount_brl: '',
+    amount_usd: '',
+    currency: 'BRL',
+    vendor: '',
+    description: '',
+    referenceDate: new Date().toISOString().slice(0,10),
+  });
+
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const [c, q] = await Promise.all([
+        getMissionCosts(mission.id, mission.aircraftId),
+        getMissionFuelQuotes(mission.id),
+      ]);
+      setCosts(c);
+      setQuotes(q);
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }, [mission.id, mission.aircraftId]);
+  useEffect(() => { load(); }, [load]);
+
+  // Cálculo do planejado: soma das cotações de fuel escolhidas (USD → BRL)
+  const chosenFuelUsd = quotes.filter(q => q.is_chosen).reduce((s,q) => s + (parseFloat(q.total_usd) || 0), 0);
+  const plannedFuelBrl = chosenFuelUsd * fx;
+
+  // Realizado: soma de costs
+  const actualTotalBrl = costs.reduce((s,c) => s + (c.amountBrl || 0), 0);
+
+  // Por categoria
+  const byCategory = {};
+  for (const c of costs) {
+    const k = c.category || 'sem categoria';
+    if (!byCategory[k]) byCategory[k] = { actual: 0, count: 0 };
+    byCategory[k].actual += c.amountBrl;
+    byCategory[k].count += 1;
+  }
+  // Adiciona fuel planejado (mesmo sem realizado)
+  const fuelKey = Object.keys(byCategory).find(k => k.toLowerCase().includes('combust')) || 'Combustível Jet-A1';
+  if (plannedFuelBrl > 0 && !byCategory[fuelKey]) byCategory[fuelKey] = { actual: 0, count: 0 };
+
+  const totalPlannedBrl = plannedFuelBrl; // outras categorias planejadas ainda manuais
+  const variance = actualTotalBrl - totalPlannedBrl;
+  const variancePct = totalPlannedBrl > 0 ? ((actualTotalBrl / totalPlannedBrl - 1) * 100) : null;
+
+  async function handleAdd() {
+    setBusy(true);
+    try {
+      let amountBrl = parseFloat(form.amount_brl) || 0;
+      let amountUsd = parseFloat(form.amount_usd) || null;
+      if (form.currency === 'USD' && amountUsd && !amountBrl) {
+        amountBrl = +(amountUsd * fx).toFixed(2);
+      }
+      await quickAddCostToMission({
+        missionId: mission.id,
+        aircraftId: mission.aircraftId,
+        category: form.category || 'other',
+        amountBrl,
+        amountUsd,
+        currency: form.currency,
+        vendor: form.vendor,
+        description: form.description,
+        referenceDate: form.referenceDate,
+      });
+      setShowAdd(false);
+      setForm({ category:'', amount_brl:'', amount_usd:'', currency:'BRL', vendor:'', description:'', referenceDate:new Date().toISOString().slice(0,10) });
+      await load();
+    } catch(e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  const fmtBRL = (v) => `R$ ${(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const fmtUSD = (v) => `$ ${(v||0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  if (loading) return <div style={{ color:'var(--text3)' }}>Carregando…</div>;
+
+  return (
+    <>
+      {error && <div style={{ padding:10, background:'rgba(239,68,68,.1)', color:'var(--red)', borderRadius:6, marginBottom:10 }}>{error}</div>}
+
+      {/* KPIs */}
+      <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <div className="section-title" style={{ margin:0 }}>Planejado × Realizado</div>
+          <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:11 }}>
+            <span style={{ color:'var(--text3)' }}>Câmbio USD→BRL:</span>
+            <input type="number" step="0.01" value={fx} onChange={e=>setFx(parseFloat(e.target.value)||5.2)} style={{ width:60, padding:'3px 6px', fontSize:11, fontFamily:'var(--font-mono)' }} />
+          </div>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:10 }}>
+          <KpiBox label="Estimado total" value={fmtBRL(totalPlannedBrl)} sub={chosenFuelUsd>0 ? `fuel: ${fmtUSD(chosenFuelUsd)}` : 'só fuel cotado'} color="var(--text2)" />
+          <KpiBox label="Realizado total" value={fmtBRL(actualTotalBrl)} sub={`${costs.length} lançamento(s)`} color="var(--blue)" />
+          <KpiBox label="Variance" value={variance>=0 ? `+${fmtBRL(variance)}` : fmtBRL(variance)} sub={variancePct!==null ? `${variancePct>=0?'+':''}${variancePct.toFixed(0)}%` : ''} color={variance>=0 ? 'var(--amber)' : 'var(--green)'} />
+        </div>
+      </div>
+
+      {/* Por categoria */}
+      <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <div className="section-title" style={{ margin:0 }}>Por categoria</div>
+          <button className="primary" onClick={() => setShowAdd(true)} style={{ fontSize:12 }}>+ Lançar custo</button>
+        </div>
+        {Object.keys(byCategory).length === 0 ? (
+          <div style={{ padding:30, textAlign:'center', color:'var(--text3)', fontSize:13 }}>
+            <div style={{ fontSize:28, marginBottom:6 }}>💸</div>
+            Nenhum custo lançado nesta missão. Clique "+ Lançar custo" pra começar.
+          </div>
+        ) : (
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'var(--bg2)' }}>
+                {['Categoria','Planejado','Realizado','Variance','Lanç.'].map(h => (
+                  <th key={h} style={{ padding:'7px 10px', textAlign: h==='Categoria'?'left':'right', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(byCategory).map(([cat, d]) => {
+                const planned = cat.toLowerCase().includes('combust') ? plannedFuelBrl : 0;
+                const v = d.actual - planned;
+                const pct = planned > 0 ? ((d.actual / planned - 1) * 100) : null;
+                const color = v > 0 ? 'var(--amber)' : v < 0 ? 'var(--green)' : 'var(--text2)';
+                return (
+                  <tr key={cat} style={{ borderBottom:'1px solid var(--border)' }}>
+                    <td style={{ padding:'8px 10px', fontWeight:500 }}>{cat}</td>
+                    <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)', color:'var(--text3)' }}>
+                      {planned > 0 ? fmtBRL(planned) : '—'}
+                    </td>
+                    <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)', fontWeight:600 }}>
+                      {fmtBRL(d.actual)}
+                    </td>
+                    <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)', color }}>
+                      {planned > 0 ? (
+                        <>
+                          {v >= 0 ? '+' : ''}{fmtBRL(v)}
+                          {pct !== null && <div style={{ fontSize:10 }}>({pct>=0?'+':''}{pct.toFixed(0)}%)</div>}
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td style={{ padding:'8px 10px', textAlign:'right', color:'var(--text3)', fontSize:11 }}>
+                      {d.count}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Lista detalhada */}
+      {costs.length > 0 && (
+        <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
+          <div className="section-title" style={{ marginBottom:8 }}>Lançamentos ({costs.length})</div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'var(--bg2)' }}>
+                {['Data','Categoria','Descrição','Fornecedor','Valor','Recibo'].map(h => (
+                  <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {costs.map(c => (
+                <tr key={c.id} style={{ borderBottom:'1px solid var(--border)' }}>
+                  <td style={{ padding:'7px 10px', fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text3)' }}>{c.referenceDate}</td>
+                  <td style={{ padding:'7px 10px' }}>{c.category}</td>
+                  <td style={{ padding:'7px 10px' }}>{c.description || '—'}</td>
+                  <td style={{ padding:'7px 10px', color:'var(--text2)' }}>{c.vendor || '—'}</td>
+                  <td style={{ padding:'7px 10px', textAlign:'right', fontFamily:'var(--font-mono)', fontWeight:600 }}>
+                    {fmtBRL(c.amountBrl)}
+                    {c.currency === 'USD' && c.amountUsd && (
+                      <div style={{ fontSize:10, color:'var(--text3)' }}>${c.amountUsd.toFixed(2)}</div>
+                    )}
+                  </td>
+                  <td style={{ padding:'7px 10px' }}>
+                    {c.receiptUrl ? <a href={c.receiptUrl} target="_blank" rel="noreferrer" style={{ fontSize:11 }}>📎 ver</a> : <span style={{ color:'var(--text3)' }}>—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Modal Lançar */}
+      {showAdd && (
+        <div onClick={() => setShowAdd(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width:'min(560px, 90vw)', background:'var(--bg1)', borderRadius:12, padding:20, border:'1px solid var(--border)', maxHeight:'90vh', overflowY:'auto' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontWeight:700 }}>+ Lançar custo da missão</div>
+              <button onClick={() => setShowAdd(false)} style={{ fontSize:14, padding:'4px 10px' }}>✕</button>
+            </div>
+            <div style={{ fontSize:11, color:'var(--text3)', marginBottom:12 }}>
+              Missão: <strong>{mission.name}</strong> · Aeronave linkada automaticamente
+            </div>
+
+            <div className="g2" style={{ marginBottom:10 }}>
+              <div><label>Data *</label><input type="date" value={form.referenceDate} onChange={e=>setForm(f=>({...f, referenceDate:e.target.value}))} /></div>
+              <div><label>Categoria *</label>
+                <CategoryInput value={form.category} onChange={(name) => setForm(f => ({...f, category: name}))} groupType="operational" />
+              </div>
+            </div>
+
+            <div style={{ marginBottom:10, display:'flex', gap:6, flexWrap:'wrap' }}>
+              <span style={{ fontSize:10, color:'var(--text3)', alignSelf:'center' }}>Atalho:</span>
+              {QUICK_COST_CATS.map(qc => (
+                <button key={qc} type="button" onClick={() => setForm(f => ({...f, category: qc}))}
+                  style={{ fontSize:10, padding:'3px 8px', background: form.category===qc ? 'var(--blue-dim)' : 'var(--bg2)', color: form.category===qc ? 'var(--blue)' : 'var(--text3)', border:`1px solid ${form.category===qc ? 'var(--blue)' : 'var(--border)'}`, borderRadius:10 }}>
+                  {qc}
+                </button>
+              ))}
+            </div>
+
+            <div className="g3" style={{ marginBottom:10 }}>
+              <div><label>Moeda</label>
+                <select value={form.currency} onChange={e=>setForm(f=>({...f, currency:e.target.value}))}>
+                  <option value="BRL">BRL</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+              <div><label>Valor BRL{form.currency==='BRL'?' *':''}</label>
+                <input type="number" step="0.01" value={form.amount_brl} onChange={e=>setForm(f=>({...f, amount_brl:e.target.value}))} placeholder="0,00" />
+              </div>
+              <div><label>Valor USD</label>
+                <input type="number" step="0.01" value={form.amount_usd} onChange={e=>setForm(f=>({...f, amount_usd:e.target.value, amount_brl: e.target.value && f.currency==='USD' ? (parseFloat(e.target.value)*fx).toFixed(2) : f.amount_brl}))} placeholder="0.00" />
+              </div>
+            </div>
+
+            <div className="g2" style={{ marginBottom:10 }}>
+              <div><label>Fornecedor</label><input value={form.vendor} onChange={e=>setForm(f=>({...f, vendor:e.target.value}))} placeholder="Fornecedor / FBO / hotel" /></div>
+              <div><label>Descrição</label><input value={form.description} onChange={e=>setForm(f=>({...f, description:e.target.value}))} placeholder="ex.: Fuel uplift KOPF" /></div>
+            </div>
+
+            <div style={{ display:'flex', gap:8 }}>
+              <button className="primary" disabled={busy || !form.category || (!form.amount_brl && !form.amount_usd)} onClick={handleAdd}>{busy?'Salvando…':'Salvar custo'}</button>
+              <button onClick={() => setShowAdd(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function KpiBox({ label, value, sub, color }) {
+  return (
+    <div style={{ background:'var(--bg2)', padding:'12px 14px', borderRadius:8, borderLeft:`3px solid ${color}` }}>
+      <div style={{ fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ fontFamily:'var(--font-mono)', fontSize:18, fontWeight:700, color, marginTop:3 }}>{value}</div>
+      {sub && <div style={{ fontSize:10, color:'var(--text3)', marginTop:2 }}>{sub}</div>}
     </div>
   );
 }
