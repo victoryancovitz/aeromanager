@@ -589,16 +589,32 @@ function BudgetEditor({ budget, aircraft, onBack }) {
 
           <div className="section-title" style={{ marginTop:18 }}>Sazonalidade mensal</div>
           <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>Peso relativo do mês (1.0 = médio). Afeta apenas linhas variáveis.</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(12, 1fr)', gap:4 }}>
-            {MONTH_NAMES.map((mn, idx) => (
-              <div key={mn}>
-                <div style={{ fontSize:10, color:'var(--text3)', textAlign:'center' }}>{mn}</div>
-                <input type="number" step="0.05" style={{ width:'100%', padding:'4px 6px', fontSize:11, textAlign:'center' }}
-                  value={(form.seasonality?.[idx+1])||1}
-                  onChange={e=>setF('seasonality',{...form.seasonality, [idx+1]: parseFloat(e.target.value)||1 })}/>
+          {(() => {
+            // Só mostra meses dentro do período
+            let startM = 1, endM = 12;
+            if (form.startDate) startM = new Date(form.startDate+'T00:00:00').getMonth()+1;
+            if (form.endDate) {
+              const e = new Date(form.endDate+'T00:00:00');
+              const s = form.startDate ? new Date(form.startDate+'T00:00:00') : null;
+              // Multi-ano não suportado: se end_date for em ano diferente, limita a Dez
+              endM = (s && e.getFullYear() !== s.getFullYear()) ? 12 : e.getMonth()+1;
+            }
+            const months = [];
+            for (let m = startM; m <= endM; m++) months.push(m);
+            const cols = Math.min(months.length, 12);
+            return (
+              <div style={{ display:'grid', gridTemplateColumns:`repeat(${cols}, 1fr)`, gap:4 }}>
+                {months.map(m => (
+                  <div key={m}>
+                    <div style={{ fontSize:10, color:'var(--text3)', textAlign:'center' }}>{MONTH_NAMES[m-1]}</div>
+                    <input type="number" step="0.05" style={{ width:'100%', padding:'4px 6px', fontSize:11, textAlign:'center' }}
+                      value={(form.seasonality?.[m])||1}
+                      onChange={e=>setF('seasonality',{...form.seasonality, [m]: parseFloat(e.target.value)||1 })}/>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           <div style={{ marginTop:18 }}><label>Notas</label><textarea value={form.notes||''} onChange={e=>setF('notes',e.target.value)} placeholder="Premissas, fontes, referências…" /></div>
 
