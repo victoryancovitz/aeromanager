@@ -107,8 +107,16 @@ export default function CategoryInput({ value, onChange, placeholder, groupType,
     }, 150);
   }
 
+  async function handleAddClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const name = window.prompt('Nome da nova categoria:', text || '');
+    if (!name || !name.trim()) return;
+    await commitNew(name.trim());
+  }
+
   return (
-    <div ref={wrapRef} style={{ position:'relative', ...style }}>
+    <div ref={wrapRef} style={{ position:'relative', display:'flex', gap:4, ...style }}>
       <input
         value={text}
         onChange={e => { setText(e.target.value); setOpen(true); setHighlight(-1); }}
@@ -117,8 +125,20 @@ export default function CategoryInput({ value, onChange, placeholder, groupType,
         onKeyDown={handleKey}
         placeholder={placeholder || 'Categoria'}
         disabled={creating}
-        style={{ width:'100%' }}
+        style={{ flex:1, minWidth:0 }}
       />
+      <button
+        type="button"
+        onClick={handleAddClick}
+        title="Criar nova categoria"
+        disabled={creating}
+        style={{
+          padding:'4px 8px', fontSize:14, fontWeight:700, lineHeight:1,
+          background:'var(--blue-dim)', color:'var(--blue)',
+          border:'1px solid var(--blue-dim)', borderRadius:4, cursor:'pointer', flexShrink:0
+        }}>
+        ＋
+      </button>
       {open && (matches.length > 0 || showCreateOption) && (
         <div style={{
           position:'absolute', top:'calc(100% + 2px)', left:0, right:0,

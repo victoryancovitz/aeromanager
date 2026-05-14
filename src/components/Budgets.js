@@ -90,9 +90,15 @@ export default function Budgets({ aircraft = [], reload, setPage }) {
   }
 
   function startNew() {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const todayStr = today.toISOString().slice(0,10);
+    const eoyStr = `${yyyy}-12-31`;
     setEditing({
       name: 'Novo orçamento',
-      fiscalYear: new Date().getFullYear(),
+      fiscalYear: yyyy,
+      startDate: todayStr,
+      endDate: eoyStr,
       aircraftId: aircraft[0]?.id || null,
       status: 'draft',
       fxUsdBrl: 5.0,
@@ -537,6 +543,35 @@ function BudgetEditor({ budget, aircraft, onBack }) {
               </select>
             </div>
           </div>
+
+          <div className="section-title" style={{ marginTop:18 }}>
+            Período do orçamento
+            <span style={{ marginLeft:8, fontSize:10, color:'var(--text3)', fontWeight:400, textTransform:'none', letterSpacing:0 }}>
+              (pode ser ano fiscal inteiro, trimestre, ou qualquer faixa parcial)
+            </span>
+          </div>
+          <div className="g2" style={{ marginBottom:8 }}>
+            <div>
+              <label>Início do período *</label>
+              <input type="date" required value={form.startDate||''} onChange={e=>setF('startDate', e.target.value)} />
+            </div>
+            <div>
+              <label>Fim do período *</label>
+              <input type="date" required value={form.endDate||''} onChange={e=>setF('endDate', e.target.value)} />
+            </div>
+          </div>
+          {form.startDate && form.endDate && (
+            <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>
+              {(() => {
+                const s = new Date(form.startDate+'T00:00:00');
+                const e = new Date(form.endDate+'T00:00:00');
+                if (e < s) return <span style={{ color:'var(--red)' }}>⚠️ Fim deve ser depois do início</span>;
+                const months = (e.getFullYear()-s.getFullYear())*12 + (e.getMonth()-s.getMonth()) + 1;
+                const sameYear = s.getFullYear() === e.getFullYear();
+                return `📅 ${months} ${months===1?'mês':'meses'} ${sameYear?'':'(multi-ano não suportado, fica limitado ao ano fiscal acima)'}`;
+              })()}
+            </div>
+          )}
 
           <div className="section-title" style={{ marginTop:18 }}>Premissas financeiras</div>
           <div className="g3">
@@ -989,13 +1024,17 @@ function MonthlyTable({ table, showActual, currentMonth }) {
                 {CATEGORY_LABELS[row.category] || row.category}
               </td>
               {row.months.map((cell, idx) => (
-                <td key={idx} style={{ padding:'4px 6px', textAlign:'right', fontFamily:'var(--font-mono)', fontSize:10, borderLeft: idx+1===currentMonth ? '2px solid var(--blue)' : 'none' }}>
-                  <div style={{ color:'var(--text3)' }}>{cell.planned > 0 ? fmtBRLShort(cell.planned) : '—'}</div>
-                  {showActual && (
-                    <div style={{ color: cell.pct !== null ? varianceColor(cell.pct) : 'var(--text2)', fontWeight:600 }}>
-                      {cell.actual > 0 ? fmtBRLShort(cell.actual) : '·'}
-                    </div>
-                  )}
+                <td key={idx} style={{ padding:'4px 6px', textAlign:'right', fontFamily:'var(--font-mono)', fontSize:10, borderLeft: idx+1===currentMonth ? '2px solid var(--blue)' : 'none', opacity: cell.inRange === false ? 0.25 : 1, background: cell.inRange === false ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 8px)' : undefined }}>
+                  {cell.inRange === false ? (
+                    <div style={{ color:'var(--text3)', fontSize:10 }} title="Fora do período do orçamento">·</div>
+                  ) : (<>
+                    <div style={{ color:'var(--text3)' }}>{cell.planned > 0 ? fmtBRLShort(cell.planned) : '—'}</div>
+                    {showActual && (
+                      <div style={{ color: cell.pct !== null ? varianceColor(cell.pct) : 'var(--text2)', fontWeight:600 }}>
+                        {cell.actual > 0 ? fmtBRLShort(cell.actual) : '·'}
+                      </div>
+                    )}
+                  </>)}
                 </td>
               ))}
               <td style={{ padding:'4px 10px', textAlign:'right', fontFamily:'var(--font-mono)', borderLeft:'1px solid var(--border2)' }}>

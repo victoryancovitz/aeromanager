@@ -1554,6 +1554,7 @@ const fromBudget = r => ({
   flightsYearAssumed: parseInt(r.flights_year_assumed)||0,
   overnightsYearAssumed: parseInt(r.overnights_year_assumed)||0,
   seasonality: r.seasonality||{}, notes: r.notes,
+  startDate: r.start_date, endDate: r.end_date,
   // Approval workflow
   submittedAt: r.submitted_at, submittedBy: r.submitted_by,
   approvedAt: r.approved_at, approvedBy: r.approved_by,
@@ -1600,6 +1601,8 @@ export async function saveBudget(b) {
     flights_year_assumed: b.flightsYearAssumed,
     overnights_year_assumed: b.overnightsYearAssumed,
     seasonality: b.seasonality||{}, notes: b.notes||null,
+    start_date: b.startDate || null,
+    end_date: b.endDate || null,
     updated_at: new Date().toISOString(),
   };
   if (b.id) {
@@ -1659,23 +1662,39 @@ export async function getBudgetMonthly(budgetId) {
   return data || [];
 }
 
-// Regenera budget_monthly a partir das linhas (distribui anual /12, mensal ×1, variável anual_qty/12)
+// Helpers de período
+export function budgetMonthRange(b) {
+  // Retorna [startMonth, endMonth] inclusive, baseado em start_date/end_date.
+  // Default = [1,12] se datas ausentes. Se end_date estiver em ano diferente do start_date,
+  // limita ao year do start_date (multi-ano não suportado nesta fase).
+  if (!b?.startDate || !b?.endDate) return [1, 12];
+  const s = new Date(b.startDate + 'T00:00:00');
+  const e = new Date(b.endDate + 'T00:00:00');
+  if (e.getFullYear() !== s.getFullYear()) return [s.getMonth()+1, 12];
+  return [s.getMonth()+1, e.getMonth()+1];
+}
+
+// Regenera budget_monthly a partir das linhas — respeita start_date/end_date.
+// Distribuição: anual ÷ N meses do período; mensal ×1 por mês; variável usa
+// annual_qty distribuído pelos N meses × sazonalidade (pesos do range).
 export async function regenerateBudgetMonthly(budgetId) {
   const b = await getBudget(budgetId);
   if (!b) throw new Error('Orçamento não encontrado');
   const lines = await getBudgetLines(budgetId);
   const seas = b.seasonality || {};
+  const [startM, endM] = budgetMonthRange(b);
+  const N = Math.max(1, endM - startM + 1);
   // Limpa monthly existente
   await supabase.from('budget_monthly').delete().eq('budget_id', budgetId);
   const rows = [];
   for (const l of lines) {
     if (!l.isActive) continue;
-    for (let m = 1; m <= 12; m++) {
+    for (let m = startM; m <= endM; m++) {
       const factor = parseFloat(seas[m]) || 1.0;
       let planned = 0;
-      if (l.unit === 'annual') planned = l.unitAmountBrl / 12;
+      if (l.unit === 'annual') planned = l.unitAmountBrl / N;
       else if (l.unit === 'monthly') planned = l.unitAmountBrl;
-      else planned = l.unitAmountBrl * (l.annualQtyAssumed/12) * factor;
+      else planned = l.unitAmountBrl * ((l.annualQtyAssumed||0)/N) * factor;
       rows.push({ budget_id: budgetId, line_id: l.id, month: m, planned_brl: Math.round(planned*100)/100 });
     }
   }
@@ -1695,6 +1714,14 @@ export async function cloneBudget(sourceId, targetYear, inflationPct = 0.04, fxA
   const lines = await getBudgetLines(sourceId);
   const replaced = src.name.replace(String(src.fiscalYear), String(targetYear));
   const newName = replaced !== src.name ? replaced : `${src.name} (${targetYear})`;
+  // Shift datas pro targetYear preservando mês/dia
+  function shiftYear(dateStr, year) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr + 'T00:00:00');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${year}-${mm}-${dd}`;
+  }
   const newBudget = await saveBudget({
     aircraftId: src.aircraftId,
     name: newName,
@@ -1707,6 +1734,8 @@ export async function cloneBudget(sourceId, targetYear, inflationPct = 0.04, fxA
     flightsYearAssumed: src.flightsYearAssumed,
     overnightsYearAssumed: src.overnightsYearAssumed,
     seasonality: src.seasonality,
+    startDate: shiftYear(src.startDate, targetYear),
+    endDate:   shiftYear(src.endDate, targetYear),
     notes: `Clonado de "${src.name}" com inflação ${(inflationPct*100).toFixed(1)}% e ajuste cambial ${(fxAdjustPct*100).toFixed(1)}% aplicados.`,
   });
   for (const l of lines) {
@@ -2117,17 +2146,17 @@ export async function reviseBudget(parentBudgetId, { label, actorRole, comment }
 
 export { BUDGET_STATES };
 
-// Followup: planejado vs realizado por mês e categoria
+// Followup: planejado vs realizado por mês e categoria — respeita start_date/end_date
 export async function getBudgetFollowup(budgetId) {
   const b = await getBudget(budgetId);
   if (!b) return null;
   const lines = await getBudgetLines(budgetId);
   const monthly = await getBudgetMonthly(budgetId);
-  // Realizado: agregação dos costs reais por mês × categoria, no fiscal_year, para a aeronave do budget
+  // Realizado: agregação dos costs reais por mês × categoria, dentro do período, para a aeronave do budget
   let actualsByMonthCat = {};
   if (b.aircraftId) {
-    const start = `${b.fiscalYear}-01-01`;
-    const end = `${b.fiscalYear}-12-31`;
+    const start = b.startDate || `${b.fiscalYear}-01-01`;
+    const end   = b.endDate   || `${b.fiscalYear}-12-31`;
     const { data: actuals, error } = await supabase
       .from('costs')
       .select('category, amount_brl, reference_date')
@@ -2151,14 +2180,21 @@ export async function getBudgetFollowup(budgetId) {
     const key = `${bm.month}|${l.category}`;
     plannedByMonthCat[key] = (plannedByMonthCat[key]||0) + parseFloat(bm.planned_brl||0);
   }
-  // Construir tabela: categorias únicas × 12 meses
+  // Construir tabela: categorias × 12 meses (com flag inRange pros meses fora do período)
+  const [startM, endM] = budgetMonthRange(b);
   const categories = [...new Set(lines.map(l => l.category))].sort();
   const table = categories.map(cat => {
     const row = { category: cat, months: [], plannedTotal: 0, actualTotal: 0 };
     for (let m = 1; m <= 12; m++) {
-      const p = plannedByMonthCat[`${m}|${cat}`] || 0;
-      const a = actualsByMonthCat[`${m}|${cat}`] || 0;
-      row.months.push({ month: m, planned: p, actual: a, variance: a - p, pct: p > 0 ? ((a/p - 1)*100) : null });
+      const inRange = m >= startM && m <= endM;
+      const p = inRange ? (plannedByMonthCat[`${m}|${cat}`] || 0) : 0;
+      const a = inRange ? (actualsByMonthCat[`${m}|${cat}`] || 0) : 0;
+      row.months.push({
+        month: m, inRange,
+        planned: p, actual: a,
+        variance: a - p,
+        pct: p > 0 ? ((a/p - 1)*100) : null,
+      });
       row.plannedTotal += p;
       row.actualTotal += a;
     }
@@ -2166,6 +2202,6 @@ export async function getBudgetFollowup(budgetId) {
     row.pctTotal = row.plannedTotal > 0 ? ((row.actualTotal/row.plannedTotal - 1)*100) : null;
     return row;
   });
-  return { budget: b, categories, table };
+  return { budget: b, categories, table, startMonth: startM, endMonth: endM };
 }
 
