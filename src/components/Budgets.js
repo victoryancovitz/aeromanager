@@ -8,6 +8,7 @@ import {
   sendBudgetEmail,
   submitBudgetForApproval, approveBudget, rejectBudget, archiveBudget,
   getBudgetApprovalLog, getMyRolesOnAircraft,
+  getCostsForBudgetCell,
 } from '../store';
 import { supabase } from '../supabase';
 import { downloadBudgetPdf, generateBudgetPdfBlob, blobToBase64 } from './BudgetReportPDF';
@@ -896,7 +897,7 @@ function BudgetFollowup({ budgetId, aircraft, onBack, setPage }) {
       {/* Detalhado por categoria */}
       <div className="card" style={{ padding:'16px 20px', marginBottom:14 }}>
         <div className="section-title">Planejado × Realizado por categoria</div>
-        <MonthlyTable table={table} showActual currentMonth={currentMonth} />
+        <MonthlyTable table={table} showActual currentMonth={currentMonth} budgetId={budgetId} />
       </div>
 
       {/* Alertas ativos */}
@@ -1020,7 +1021,10 @@ function KpiCard({ label, value, sub, color }) {
   );
 }
 
-function MonthlyTable({ table, showActual, currentMonth }) {
+function MonthlyTable({ table, showActual, currentMonth, budgetId }) {
+  const [drill, setDrill] = useState(null); // { category, month, label }
+  const canDrill = !!budgetId && showActual;
+
   return (
     <div style={{ overflowX:'auto' }}>
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
@@ -1039,20 +1043,32 @@ function MonthlyTable({ table, showActual, currentMonth }) {
               <td style={{ padding:'8px 10px', fontWeight:500, position:'sticky', left:0, background:'var(--bg0)' }}>
                 {CATEGORY_LABELS[row.category] || row.category}
               </td>
-              {row.months.map((cell, idx) => (
-                <td key={idx} style={{ padding:'4px 6px', textAlign:'right', fontFamily:'var(--font-mono)', fontSize:10, borderLeft: idx+1===currentMonth ? '2px solid var(--blue)' : 'none', opacity: cell.inRange === false ? 0.25 : 1, background: cell.inRange === false ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 8px)' : undefined }}>
+              {row.months.map((cell, idx) => {
+                const isClickable = canDrill && cell.inRange !== false && cell.actual > 0;
+                return (
+                <td key={idx}
+                  onClick={isClickable ? () => setDrill({ category: row.category, month: cell.month, label: `${CATEGORY_LABELS[row.category]||row.category} · ${MONTH_NAMES[cell.month-1]}` }) : undefined}
+                  style={{
+                    padding:'4px 6px', textAlign:'right', fontFamily:'var(--font-mono)', fontSize:10,
+                    borderLeft: idx+1===currentMonth ? '2px solid var(--blue)' : 'none',
+                    opacity: cell.inRange === false ? 0.25 : 1,
+                    background: cell.inRange === false ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 8px)' : undefined,
+                    cursor: isClickable ? 'pointer' : 'default',
+                  }}
+                  title={isClickable ? 'Clique para ver os custos reais' : undefined}>
                   {cell.inRange === false ? (
                     <div style={{ color:'var(--text3)', fontSize:10 }} title="Fora do período do orçamento">·</div>
                   ) : (<>
                     <div style={{ color:'var(--text3)' }}>{cell.planned > 0 ? fmtBRLShort(cell.planned) : '—'}</div>
                     {showActual && (
-                      <div style={{ color: cell.pct !== null ? varianceColor(cell.pct) : 'var(--text2)', fontWeight:600 }}>
+                      <div style={{ color: cell.pct !== null ? varianceColor(cell.pct) : 'var(--text2)', fontWeight:600, textDecoration: isClickable ? 'underline dotted' : 'none' }}>
                         {cell.actual > 0 ? fmtBRLShort(cell.actual) : '·'}
                       </div>
                     )}
                   </>)}
                 </td>
-              ))}
+                );
+              })}
               <td style={{ padding:'4px 10px', textAlign:'right', fontFamily:'var(--font-mono)', borderLeft:'1px solid var(--border2)' }}>
                 <div style={{ color:'var(--text3)' }}>{fmtBRLShort(row.plannedTotal)}</div>
                 {showActual && (
@@ -1066,10 +1082,103 @@ function MonthlyTable({ table, showActual, currentMonth }) {
           ))}
         </tbody>
       </table>
-      <div style={{ fontSize:10, color:'var(--text3)', marginTop:8, display:'flex', gap:14 }}>
+      <div style={{ fontSize:10, color:'var(--text3)', marginTop:8, display:'flex', gap:14, flexWrap:'wrap' }}>
         <span><span style={{ color:'var(--text3)' }}>━</span> planejado</span>
         {showActual && <span><span style={{ color:'var(--blue)', fontWeight:600 }}>━</span> realizado</span>}
         {showActual && <span>cor da variação: <span style={{color:'var(--green)'}}>economia</span> · <span style={{color:'var(--amber)'}}>até +25%</span> · <span style={{color:'var(--red)'}}>{'>+25%'}</span></span>}
+        {canDrill && <span style={{ color:'var(--blue)' }}>💡 clique no realizado pra ver os custos</span>}
+      </div>
+      {drill && (
+        <CellDrillDown
+          budgetId={budgetId}
+          category={drill.category}
+          month={drill.month}
+          label={drill.label}
+          onClose={() => setDrill(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CellDrillDown({ budgetId, category, month, label, onClose }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    setItems(null);
+    setError(null);
+    getCostsForBudgetCell(budgetId, category, month)
+      .then(setItems)
+      .catch(e => setError(e.message));
+  }, [budgetId, category, month]);
+  const total = (items || []).reduce((s, i) => s + (i.amountBrl || 0), 0);
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', justifyContent:'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(680px, 100vw)', background:'var(--bg1)', borderLeft:'1px solid var(--border)', padding:'20px 24px', overflowY:'auto', boxShadow:'-8px 0 30px rgba(0,0,0,0.4)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.08em' }}>Custos reais — drill-down</div>
+            <div style={{ fontSize:16, fontWeight:600, marginTop:4 }}>{label}</div>
+          </div>
+          <button onClick={onClose} style={{ fontSize:14, padding:'4px 10px' }}>✕</button>
+        </div>
+        {error && <div style={{ padding:10, background:'rgba(239,68,68,.1)', color:'var(--red)', borderRadius:6, fontSize:12 }}>Erro: {error}</div>}
+        {items === null && !error && <div style={{ color:'var(--text3)', fontSize:12 }}>Carregando…</div>}
+        {items && items.length === 0 && (
+          <div style={{ padding:30, textAlign:'center', color:'var(--text3)', fontSize:13 }}>
+            <div style={{ fontSize:28, marginBottom:6 }}>📭</div>
+            Nenhum custo encontrado nessa categoria/mês.
+          </div>
+        )}
+        {items && items.length > 0 && (
+          <>
+            <div style={{ marginBottom:10, fontSize:12, color:'var(--text2)' }}>
+              <strong>{items.length}</strong> lançamento(s) — total <strong style={{ color:'var(--blue)' }}>{fmtBRL(total)}</strong>
+            </div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr style={{ background:'var(--bg2)' }}>
+                  {['Data','Descrição','Fornecedor','Valor (BRL)','Status'].map(h => (
+                    <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.05em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(c => (
+                  <tr key={c.id} style={{ borderBottom:'1px solid var(--border)' }}>
+                    <td style={{ padding:'8px 10px', fontFamily:'var(--font-mono)', color:'var(--text3)', fontSize:11, whiteSpace:'nowrap' }}>{c.referenceDate || '—'}</td>
+                    <td style={{ padding:'8px 10px' }}>
+                      <div style={{ fontWeight:500 }}>{c.description || '—'}</div>
+                      {c.submittedVia && c.submittedVia !== 'web' && (
+                        <div style={{ fontSize:10, color:'var(--text3)', marginTop:2 }}>via {c.submittedVia}</div>
+                      )}
+                    </td>
+                    <td style={{ padding:'8px 10px', color:'var(--text2)' }}>{c.vendor || '—'}</td>
+                    <td style={{ padding:'8px 10px', textAlign:'right', fontFamily:'var(--font-mono)', fontWeight:600 }}>
+                      {fmtBRL(c.amountBrl)}
+                      {c.currency === 'USD' && c.amountUsd && (
+                        <div style={{ fontSize:10, color:'var(--text3)' }}>${c.amountUsd.toFixed(2)}</div>
+                      )}
+                    </td>
+                    <td style={{ padding:'8px 10px' }}>
+                      <span style={{
+                        fontSize:10, padding:'2px 6px', borderRadius:10,
+                        background: c.status === 'approved' ? 'rgba(61,191,138,.15)' : 'rgba(232,168,74,.15)',
+                        color: c.status === 'approved' ? 'var(--green)' : 'var(--amber)'
+                      }}>{c.status || 'approved'}</span>
+                      {c.reimbursable && (
+                        <div style={{ fontSize:9, color:'var(--text3)', marginTop:2 }}>reembolsável</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ marginTop:14, padding:10, background:'var(--bg2)', borderRadius:6, fontSize:11, color:'var(--text3)' }}>
+              💡 Para editar um lançamento, abra <strong>Custos</strong> no menu lateral. Filtrar por categoria "{CATEGORY_LABELS[category] || category}" e mês para encontrá-los mais rápido.
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

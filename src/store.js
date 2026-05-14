@@ -2146,6 +2146,43 @@ export async function reviseBudget(parentBudgetId, { label, actorRole, comment }
 
 export { BUDGET_STATES };
 
+// Drill-down: lista os custos reais que entram numa célula (categoria × mês) de um budget.
+// Usado pelo Followup pra mostrar exatamente quais lançamentos compõem o realizado.
+export async function getCostsForBudgetCell(budgetId, category, month) {
+  const b = await getBudget(budgetId);
+  if (!b || !b.aircraftId) return [];
+  // Range de datas: respeitando start_date/end_date, restringindo ao mês solicitado
+  const yyyy = b.startDate ? new Date(b.startDate+'T00:00:00').getFullYear() : b.fiscalYear;
+  const mm = String(month).padStart(2,'0');
+  const start = `${yyyy}-${mm}-01`;
+  // Último dia do mês
+  const lastDay = new Date(yyyy, month, 0).getDate();
+  const end = `${yyyy}-${mm}-${String(lastDay).padStart(2,'0')}`;
+  const { data, error } = await supabase
+    .from('costs')
+    .select('*')
+    .eq('aircraft_id', b.aircraftId)
+    .eq('category', category)
+    .gte('reference_date', start)
+    .lte('reference_date', end)
+    .order('reference_date', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(c => ({
+    id: c.id,
+    referenceDate: c.reference_date,
+    description: c.description,
+    vendor: c.vendor,
+    amountBrl: parseFloat(c.amount_brl) || 0,
+    currency: c.currency,
+    amountUsd: parseFloat(c.amount_usd) || null,
+    receiptUrl: c.receipt_url,
+    status: c.status,
+    submittedVia: c.submitted_via,
+    paidBy: c.paid_by,
+    reimbursable: c.reimbursable,
+  }));
+}
+
 // Followup: planejado vs realizado por mês e categoria — respeita start_date/end_date
 export async function getBudgetFollowup(budgetId) {
   const b = await getBudget(budgetId);
