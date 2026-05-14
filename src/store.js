@@ -1109,43 +1109,344 @@ function fromDB_maint(r) {
 
 function toDB_mission(m, userId) {
   return {
-    id:            m.id || undefined,
-    user_id:       userId,
-    aircraft_id:   m.aircraftId || null,
-    flight_id:     m.flightId || null,
-    name:          m.name,
-    type:          m.type || 'round_trip',
-    status:        m.status || 'planned',
-    purpose:       m.purpose || 'leisure',
-    date_start:    m.dateStart || null,
-    date_end:      m.dateEnd || null,
-    legs:          m.legs || [],
-    passengers:    m.passengers || [],
-    notes:         m.notes || null,
-    cancelled_at:  m.cancelledAt || null,
-    cancel_reason: m.cancelReason || null,
+    id:             m.id || undefined,
+    user_id:        userId,
+    aircraft_id:    m.aircraftId || null,
+    flight_id:      m.flightId || null,
+    name:           m.name,
+    type:           m.type || 'round_trip',
+    status:         m.status || 'planned',
+    purpose:        m.purpose || 'leisure',
+    date_start:     m.dateStart || null,
+    date_end:       m.dateEnd || null,
+    legs:           m.legs || [],
+    passengers:     m.passengers || [],
+    notes:          m.notes || null,
+    cancelled_at:   m.cancelledAt || null,
+    cancel_reason:  m.cancelReason || null,
+    // CFP extensions
+    mission_code:   m.missionCode || null,
+    operation_type: m.operationType || null,
+    operator_name:  m.operatorName || null,
+    operator_cnpj:  m.operatorCnpj || null,
+    operator_email: m.operatorEmail || null,
+    operator_phone: m.operatorPhone || null,
+    briefing_notes: m.briefingNotes || null,
+    detections:     m.detections || {},
   };
 }
 
 function fromDB_mission(r) {
   return {
-    id:           r.id,
-    aircraftId:   r.aircraft_id,
-    flightId:     r.flight_id || null,
-    name:         r.name,
-    type:         r.type,
-    status:       r.status,
-    purpose:      r.purpose,
-    dateStart:    r.date_start,
-    dateEnd:      r.date_end,
-    legs:         r.legs || [],
-    passengers:   r.passengers || [],
-    notes:        r.notes,
-    cancelledAt:  r.cancelled_at || null,
-    cancelReason: r.cancel_reason || null,
-    updatedAt:    r.updated_at,
+    id:            r.id,
+    aircraftId:    r.aircraft_id,
+    flightId:      r.flight_id || null,
+    name:          r.name,
+    type:          r.type,
+    status:        r.status,
+    purpose:       r.purpose,
+    dateStart:     r.date_start,
+    dateEnd:       r.date_end,
+    legs:          r.legs || [],
+    passengers:    r.passengers || [],
+    notes:         r.notes,
+    cancelledAt:   r.cancelled_at || null,
+    cancelReason:  r.cancel_reason || null,
+    updatedAt:     r.updated_at,
+    // CFP extensions
+    missionCode:   r.mission_code,
+    operationType: r.operation_type,
+    operatorName:  r.operator_name,
+    operatorCnpj:  r.operator_cnpj,
+    operatorEmail: r.operator_email,
+    operatorPhone: r.operator_phone,
+    briefingNotes: r.briefing_notes,
+    detections:    r.detections || {},
   };
 }
+
+// ── CFP helpers ───────────────────────────────────────────────
+
+// Auto-detecta flags da missão baseado nos legs (ICAO países, datas, PAX)
+export function detectMissionFlags(mission) {
+  const legs = mission?.legs || [];
+  const isBrazilian = (icao) => /^(SB|SD|SI|SJ|SN|SS|SW)/.test((icao||'').toUpperCase());
+  const isUS = (icao) => /^K/.test((icao||'').toUpperCase());
+  const flags = {
+    international: false,
+    operates_us: false,
+    operates_br: false,
+    exits_br: false,
+    enters_br: false,
+    has_passengers: (mission?.passengers || []).filter(p => p.role !== 'crew').length > 0,
+    has_overnights: false,
+    uses_handler: false,
+  };
+  for (const leg of legs) {
+    const o = (leg.departureIcao || '').toUpperCase();
+    const d = (leg.destinationIcao || '').toUpperCase();
+    const oBR = isBrazilian(o);
+    const dBR = isBrazilian(d);
+    if (o && d && oBR !== dBR) flags.international = true;
+    if (isUS(o) || isUS(d)) { flags.operates_us = true; flags.uses_handler = true; }
+    if (oBR || dBR) flags.operates_br = true;
+    if (oBR && d && !dBR) flags.exits_br = true;
+    if (o && !oBR && dBR) flags.enters_br = true;
+  }
+  // overnights = quando dateEnd > dateStart por > 0 dias
+  if (mission?.dateStart && mission?.dateEnd) {
+    const s = new Date(mission.dateStart+'T00:00:00');
+    const e = new Date(mission.dateEnd+'T00:00:00');
+    flags.has_overnights = e > s;
+  }
+  return flags;
+}
+
+// Recomputa e persiste detections — útil ao salvar mudanças nos legs
+export async function saveMissionDetections(missionId) {
+  const { data } = await supabase.from('missions').select('*').eq('id', missionId).maybeSingle();
+  if (!data) return null;
+  const m = fromDB_mission(data);
+  const detections = detectMissionFlags(m);
+  await supabase.from('missions').update({ detections }).eq('id', missionId);
+  return detections;
+}
+
+// ── Mission Checklist ────────────────────────────────────────
+const CHECKLIST_TYPE_LABELS = {
+  briefing:   'Briefing',
+  HR:         'Handling Request (HR)',
+  GD:         'General Declaration',
+  PM:         'Permission to Land (PM)',
+  CR:         'Crew Manifesto',
+  insurance:  'Seguro',
+  fuel:       'Fuel Order',
+  eAPIS:      'eAPIS (CBP)',
+  gendec:     'GenDec',
+  preflight:  'Pré-voo',
+  postflight: 'Pós-voo',
+  custom:     'Customizado',
+};
+
+export { CHECKLIST_TYPE_LABELS };
+
+export async function getMissionChecklist(missionId) {
+  const { data, error } = await supabase
+    .from('mission_checklist_items')
+    .select('*')
+    .eq('mission_id', missionId)
+    .order('leg_index').order('checklist_type');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveMissionChecklistItem(item) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const row = {
+    mission_id: item.missionId,
+    leg_index: item.legIndex,
+    checklist_type: item.checklistType,
+    custom_label: item.customLabel || null,
+    status: item.status || 'pending',
+    assigned_to: item.assignedTo || null,
+    due_date: item.dueDate || null,
+    notes: item.notes || null,
+    attachment_url: item.attachmentUrl || null,
+    user_id: user.id,
+  };
+  if (item.id) {
+    const { data, error } = await supabase.from('mission_checklist_items').update(row).eq('id', item.id).select().single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase.from('mission_checklist_items').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+export async function deleteMissionChecklistItem(id) {
+  const { error } = await supabase.from('mission_checklist_items').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Mission Fuel Quotes ──────────────────────────────────────
+export async function getMissionFuelQuotes(missionId) {
+  const { data, error } = await supabase
+    .from('mission_fuel_quotes')
+    .select('*')
+    .eq('mission_id', missionId)
+    .order('leg_index').order('total_usd');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveMissionFuelQuote(q) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  // Calcular total_usd se uplift + price_per_gal informados
+  let total = q.totalUsd;
+  if (q.upliftLb && q.pricePerGal && !total) {
+    // 1 lb Jet-A1 ≈ 0.1495 gal (densidade 6.7 lb/gal)
+    const gallons = parseFloat(q.upliftLb) / 6.7;
+    total = +(gallons * parseFloat(q.pricePerGal)).toFixed(2);
+  }
+  const row = {
+    mission_id: q.missionId,
+    leg_index: q.legIndex,
+    airport_icao: (q.airportIcao || '').toUpperCase(),
+    uplift_lb: q.upliftLb || null,
+    supplier: q.supplier || null,
+    fbo_id: q.fboId || null,
+    price_per_gal: q.pricePerGal || null,
+    total_usd: total || null,
+    is_chosen: q.isChosen === true,
+    notes: q.notes || null,
+    quoted_at: q.quotedAt || new Date().toISOString().slice(0,10),
+    user_id: user.id,
+  };
+  if (q.id) {
+    const { data, error } = await supabase.from('mission_fuel_quotes').update(row).eq('id', q.id).select().single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase.from('mission_fuel_quotes').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+export async function chooseFuelQuote(missionId, legIndex, quoteId) {
+  // Desmarca todas do leg e marca a escolhida
+  await supabase.from('mission_fuel_quotes')
+    .update({ is_chosen: false })
+    .eq('mission_id', missionId)
+    .eq('leg_index', legIndex);
+  if (quoteId) {
+    await supabase.from('mission_fuel_quotes')
+      .update({ is_chosen: true })
+      .eq('id', quoteId);
+  }
+}
+
+export async function deleteMissionFuelQuote(id) {
+  const { error } = await supabase.from('mission_fuel_quotes').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Mission Doc Snapshots ────────────────────────────────────
+export async function getMissionDocSnapshots(missionId) {
+  const { data, error } = await supabase
+    .from('mission_doc_snapshots')
+    .select('*')
+    .eq('mission_id', missionId)
+    .order('expires_at', { nullsLast: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// Tira um snapshot dos documentos relevantes pra missão. Compara validades
+// com a data fim da missão pra classificar como ok/warning/expired/blocking.
+export async function snapshotMissionDocs(missionId) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const { data: mRow } = await supabase.from('missions').select('*').eq('id', missionId).maybeSingle();
+  if (!mRow) throw new Error('Missão não encontrada');
+  const missionEnd = mRow.date_end || mRow.date_start || new Date().toISOString().slice(0,10);
+  const endDate = new Date(missionEnd+'T00:00:00');
+
+  // Apaga snapshots anteriores
+  await supabase.from('mission_doc_snapshots').delete().eq('mission_id', missionId);
+
+  const items = [];
+
+  // 1. Documentos da tripulação (crew_documents)
+  const { data: crewDocs } = await supabase
+    .from('crew_documents')
+    .select('*, crew_members(full_name)')
+    .eq('user_id', user.id);
+  for (const d of (crewDocs || [])) {
+    const expDate = d.expires_at ? new Date(d.expires_at+'T00:00:00') : null;
+    let status = 'ok';
+    let days = null;
+    if (expDate) {
+      days = Math.ceil((expDate - endDate) / (24*60*60*1000));
+      if (days < 0) status = 'expired';
+      else if (days < 30) status = 'warning';
+    }
+    items.push({
+      mission_id: missionId,
+      doc_type: `crew_${d.doc_type || 'document'}`,
+      reference_id: d.id,
+      doc_label: `${d.crew_members?.full_name || d.crew_name || 'Tripulante'} — ${d.doc_type || 'doc'} ${d.doc_number || ''}`.trim(),
+      expires_at: d.expires_at,
+      status,
+      days_to_expire: days,
+      user_id: user.id,
+    });
+  }
+
+  // 2. Documentos da aeronave (aircraft_documents)
+  if (mRow.aircraft_id) {
+    const { data: acDocs } = await supabase
+      .from('aircraft_documents')
+      .select('*')
+      .eq('aircraft_id', mRow.aircraft_id);
+    for (const d of (acDocs || [])) {
+      const expDate = d.expires_at ? new Date(d.expires_at+'T00:00:00') : null;
+      let status = 'ok';
+      let days = null;
+      if (expDate) {
+        days = Math.ceil((expDate - endDate) / (24*60*60*1000));
+        if (days < 0) status = 'expired';
+        else if (days < 30) status = 'warning';
+      }
+      items.push({
+        mission_id: missionId,
+        doc_type: `aircraft_${d.doc_type || 'document'}`,
+        reference_id: d.id,
+        doc_label: `Aeronave — ${d.name || d.doc_type || 'doc'}`,
+        expires_at: d.expires_at,
+        status,
+        days_to_expire: days,
+        user_id: user.id,
+      });
+    }
+    // 3. Manutenção
+    const { data: mx } = await supabase
+      .from('maintenance')
+      .select('*')
+      .eq('aircraft_id', mRow.aircraft_id);
+    for (const m of (mx || [])) {
+      const expDate = m.next_due_date ? new Date(m.next_due_date+'T00:00:00') : null;
+      let status = 'ok';
+      let days = null;
+      if (expDate) {
+        days = Math.ceil((expDate - endDate) / (24*60*60*1000));
+        if (days < 0) status = 'expired';
+        else if (days < 15) status = 'warning';
+      }
+      items.push({
+        mission_id: missionId,
+        doc_type: 'mx_inspection',
+        reference_id: m.id,
+        doc_label: `MX — ${m.title || m.description || 'Inspeção'}`,
+        expires_at: m.next_due_date,
+        status,
+        days_to_expire: days,
+        user_id: user.id,
+      });
+    }
+  }
+
+  if (items.length > 0) {
+    const { error } = await supabase.from('mission_doc_snapshots').insert(items);
+    if (error) throw error;
+  }
+  return items.length;
+}
+
 
 // Compute fuel bias from real flights vs POH
 export async function computeFuelBias(aircraftId) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getMissions, saveMission, deleteMission, getFlights, getCosts } from '../store';
 import { AcIcon } from './Instruments';
 import IcaoInput from './IcaoInput';
+import CFPDashboard from './CFPDashboard';
 
 const MISSION_TYPES = [{ v:'round_trip',l:'Bate e volta'},{ v:'multi_leg',l:'Multi-leg'},{ v:'ferry',l:'Posicionamento (ferry)'},{ v:'maintenance',l:'Voo de manutenção'},{ v:'international',l:'Internacional'}];
 const PURPOSES = [{ v:'leisure',l:'Lazer / Passeio'},{ v:'transport',l:'Transporte'},{ v:'business',l:'Negócios'},{ v:'training',l:'Instrução'},{ v:'professional',l:'Profissional'}];
@@ -18,6 +19,7 @@ export default function Missions({ aircraft=[], reload, onGenerateGD }) {
   const [newPax, setNewPax]     = useState({ name:'', doc:'', role:'pax' });
   const [newLeg, setNewLeg]     = useState({ seq:1, departureIcao:'', destinationIcao:'', date:'', flightId:'' });
   const [loading, setLoading]   = useState(true);
+  const [cfpMissionId, setCfpMissionId] = useState(null);
 
   useEffect(() => {
     Promise.all([getMissions(), getFlights(), getCosts()])
@@ -62,6 +64,8 @@ export default function Missions({ aircraft=[], reload, onGenerateGD }) {
   const acFlights = form.aircraftId ? flights.filter(f=>f.aircraftId===form.aircraftId).sort((a,b)=>b.date.localeCompare(a.date)) : [];
 
   if (loading) return <div style={{ padding:40, color:'#5a6080', textAlign:'center', fontSize:13 }}>Carregando missões...</div>;
+
+  if (cfpMissionId) return <CFPDashboard missionId={cfpMissionId} onClose={() => setCfpMissionId(null)} />;
 
   if (editing !== null) return (
     <div style={{ padding:24, maxWidth:720 }}>
@@ -210,6 +214,7 @@ export default function Missions({ aircraft=[], reload, onGenerateGD }) {
                 ))}
               </div>
               <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                <button className="primary" style={{ fontSize:12, padding:'6px 12px' }} onClick={()=>setCfpMissionId(m.id)}>📋 CFP</button>
                 <button style={{ fontSize:12, padding:'6px 12px' }} onClick={()=>startEdit(m)}>Editar</button>
                 <button className="danger" style={{ fontSize:12, padding:'6px 12px' }} onClick={()=>remove(m.id)}>✕</button>
               </div>
