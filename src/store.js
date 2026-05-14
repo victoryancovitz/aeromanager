@@ -501,6 +501,38 @@ export async function deleteCostCategory(id) {
   await supabase.from('cost_categories').delete().eq('id', id);
 }
 
+// Quickcreate: garante que existe uma categoria com `name`. Cria se não existir.
+// Retorna a categoria (existente ou recém-criada). Idempotente por (user_id, name).
+export async function ensureCostCategory(name, defaults = {}) {
+  const user = await getUser();
+  if (!user) throw new Error('Não autenticado');
+  const cleanName = (name || '').trim();
+  if (!cleanName) throw new Error('Nome da categoria é obrigatório');
+  // Tenta encontrar (case-insensitive)
+  const { data: existing } = await supabase
+    .from('cost_categories')
+    .select('*')
+    .eq('user_id', user.id)
+    .ilike('name', cleanName)
+    .maybeSingle();
+  if (existing) return existing;
+  // Insere
+  const { data, error } = await supabase
+    .from('cost_categories')
+    .insert({
+      user_id: user.id,
+      name: cleanName,
+      group_type: defaults.groupType || 'operational',
+      color: defaults.color || null,
+      icon: defaults.icon || null,
+      sort_order: defaults.sortOrder ?? 100,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ── Maintenance ───────────────────────────────────────────────
 export async function getMaintenance() {
   const { data, error } = await supabase

@@ -11,6 +11,7 @@ import {
 } from '../store';
 import { supabase } from '../supabase';
 import { downloadBudgetPdf, generateBudgetPdfBlob, blobToBase64 } from './BudgetReportPDF';
+import CategoryInput from './CategoryInput';
 
 const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -202,6 +203,7 @@ export default function Budgets({ aircraft = [], reload, setPage }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function ApprovalBar({ budget, onChange }) {
   const [myRoles, setMyRoles] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [showApprove, setShowApprove] = useState(false);
   const [showReject, setShowReject] = useState(false);
@@ -211,28 +213,49 @@ function ApprovalBar({ budget, onChange }) {
   const [showLog, setShowLog] = useState(false);
 
   useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id || null));
+  }, []);
+
+  useEffect(() => {
     if (budget?.aircraftId) {
       getMyRolesOnAircraft(budget.aircraftId).then(setMyRoles).catch(() => setMyRoles([]));
+    } else {
+      setMyRoles([]);
     }
     if (budget?.id) {
       getBudgetApprovalLog(budget.id).then(setAuditLog).catch(() => setAuditLog([]));
+    } else {
+      setAuditLog([]);
     }
   }, [budget?.id, budget?.aircraftId]);
 
-  if (!budget || !budget.id) return null; // só faz sentido depois de salvo
+  // Estado "salve as premissas primeiro" — budget ainda não tem id
+  if (!budget || !budget.id) {
+    return (
+      <div className="card" style={{ padding:12, marginBottom:16, borderLeft:'4px solid var(--amber)', background:'rgba(232,168,74,0.05)', fontSize:12, color:'var(--text2)' }}>
+        <span style={{ fontWeight:600, color:'var(--amber)' }}>📝 Rascunho não salvo</span>
+        {' '}— preencha as premissas e clique em <em>Salvar premissas</em> abaixo. Depois aparecem os botões de submissão pra aprovação.
+      </div>
+    );
+  }
 
   const roles = myRoles.map(r => r.role);
-  const isOwner   = roles.includes('owner') || roles.includes('co_owner');
+  // Fallback: se o usuário atual é o criador do budget (budget.userId === auth.uid)
+  // e ainda não tem stakeholder vinculado (caso single-user antigo), tratamos como owner+manager.
+  const isCreator = currentUserId && budget.userId === currentUserId;
+  const isOwner   = roles.includes('owner') || roles.includes('co_owner') || isCreator;
   const isManager = roles.includes('manager') || isOwner;
   const status = budget.status || 'draft';
-  const meta = STATUS_META[status];
+  const meta = STATUS_META[status] || STATUS_META.draft;
 
   const canSubmit  = isManager && (status === 'draft' || status === 'rejected');
   const canApprove = isOwner   && status === 'submitted';
   const canReject  = isOwner   && status === 'submitted';
   const canArchive = isOwner   && (status === 'active' || status === 'approved');
 
-  const myRoleLabel = isOwner ? 'Dono' : isManager ? 'Gestor' : 'Visualizador';
+  const myRoleLabel = isOwner ? (roles.includes('owner') ? 'Dono' : isCreator ? 'Dono (criador)' : 'Cosócio')
+                    : isManager ? 'Gestor'
+                    : 'Visualizador';
 
   async function refresh() {
     try {
@@ -611,10 +634,13 @@ function LinesTable({ lines, costType, onAdd, onChange, onRemove }) {
                   : l.unitAmountBrl * (l.annualQtyAssumed||0);
                 return (
                   <tr key={l.id} style={{ borderBottom:'1px solid var(--border)' }}>
-                    <td style={{ padding:'4px 6px', width:140 }}>
-                      <select value={l.category} onChange={e=>onChange(l.id, {category: e.target.value})} style={{ fontSize:11, padding:'4px 6px', width:'100%' }}>
-                        {Object.entries(CATEGORY_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
+                    <td style={{ padding:'4px 6px', width:160 }}>
+                      <CategoryInput
+                        value={l.category}
+                        onChange={(name) => onChange(l.id, { category: name })}
+                        groupType={costType === 'fixed' ? 'fixed' : 'operational'}
+                        placeholder="Categoria"
+                      />
                     </td>
                     <td style={{ padding:'4px 6px' }}><input value={l.description||''} onChange={e=>onChange(l.id, {description: e.target.value})} style={{ fontSize:11, padding:'4px 6px', width:'100%' }} /></td>
                     <td style={{ padding:'4px 6px', width:120 }}><input value={l.vendor||''} onChange={e=>onChange(l.id, {vendor: e.target.value})} style={{ fontSize:11, padding:'4px 6px', width:'100%' }} /></td>
