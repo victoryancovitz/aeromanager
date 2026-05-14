@@ -276,9 +276,14 @@ function CustosTab({ mission }) {
           </div>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:10 }}>
-          <KpiBox label="Estimado total" value={fmtBRL(totalPlannedBrl)} sub={chosenFuelUsd>0 ? `fuel: ${fmtUSD(chosenFuelUsd)}` : 'só fuel cotado'} color="var(--text2)" />
+          <KpiBox label="Estimado (só fuel)" value={fmtBRL(totalPlannedBrl)} sub={chosenFuelUsd>0 ? `${fmtUSD(chosenFuelUsd)} × ${fx}` : '—'} color="var(--text2)" />
           <KpiBox label="Realizado total" value={fmtBRL(actualTotalBrl)} sub={`${costs.length} lançamento(s)`} color="var(--blue)" />
-          <KpiBox label="Variance" value={variance>=0 ? `+${fmtBRL(variance)}` : fmtBRL(variance)} sub={variancePct!==null ? `${variancePct>=0?'+':''}${variancePct.toFixed(0)}%` : ''} color={variance>=0 ? 'var(--amber)' : 'var(--green)'} />
+          <KpiBox label="Variance fuel" value={variance>=0 ? `+${fmtBRL(variance)}` : fmtBRL(variance)} sub={variancePct!==null ? `${variancePct>=0?'+':''}${variancePct.toFixed(0)}%` : '—'} color={variance>=0 ? 'var(--amber)' : 'var(--green)'} />
+        </div>
+        <div style={{ fontSize:10, color:'var(--text3)', marginTop:10, padding:'8px 10px', background:'var(--bg2)', borderRadius:6, lineHeight:1.5 }}>
+          💡 <strong>Estimado</strong> considera apenas as <em>cotações de fuel escolhidas</em> convertidas pelo câmbio acima.
+          Hotel, per-diem, catering, handling, taxas aeroportuárias entram conforme você lança em "+ Lançar custo".
+          A coluna <strong>Variance</strong> só faz sentido depois que você lança os custos reais correspondentes.
         </div>
       </div>
 
@@ -481,7 +486,7 @@ function SummaryTab({ mission, detections, editingMeta, setEditingMeta, onSave, 
           {[
             { label:'Legs', value: totalLegs },
             { label:'PAX', value: totalPax },
-            { label:'Tripulação', value: totalCrew },
+            { label:'Tripulação', value: totalCrew > 0 ? totalCrew : '—' },
             { label:'Origem', value: firstLeg?.departureIcao || '—' },
             { label:'Destino final', value: lastLeg?.destinationIcao || '—' },
             { label:'Início', value: mission.dateStart || '—' },
@@ -773,6 +778,15 @@ function FuelTab({ mission }) {
   }
 
   async function saveQuote() {
+    const ppg = parseFloat(editing.pricePerGal);
+    const lb  = parseFloat(editing.upliftLb);
+    // Sanity check: Jet-A1 típico é US$ 5-12/gal. Acima de $20 quase certamente é erro de digitação.
+    if (ppg > 20) {
+      if (!window.confirm(`$${ppg}/gal parece alto demais (Jet-A1 normal: $5-12/gal). Você quis dizer $${(ppg/100).toFixed(2)}/gal? Clique OK pra salvar mesmo assim.`)) return;
+    }
+    if (lb > 100000) {
+      if (!window.confirm(`${lb} lb de uplift parece muito (G550 típico: 30-40k lb). Confirma?`)) return;
+    }
     setBusy(true);
     try {
       await saveMissionFuelQuote({
@@ -780,8 +794,8 @@ function FuelTab({ mission }) {
         legIndex: editing.legIndex,
         airportIcao: editing.airport,
         supplier: editing.supplier,
-        upliftLb: parseFloat(editing.upliftLb) || null,
-        pricePerGal: parseFloat(editing.pricePerGal) || null,
+        upliftLb: lb || null,
+        pricePerGal: ppg || null,
         notes: editing.notes || null,
       });
       setEditing(null);

@@ -576,7 +576,9 @@ export async function getMissions() {
 export async function saveMission(m) {
   const user = await getUser();
   if (!user) throw new Error('Não autenticado');
-  const row = toDB_mission(m, user.id);
+  // Auto-recompute detections sempre que salvar (legs ou passengers podem ter mudado)
+  const withDetections = { ...m, detections: detectMissionFlags(m) };
+  const row = toDB_mission(withDetections, user.id);
   if (m.id) {
     const { data, error } = await supabase.from('missions').update(row).eq('id', m.id).select().single();
     if (error) throw error;
@@ -1167,11 +1169,50 @@ function fromDB_mission(r) {
 
 // ── CFP helpers ───────────────────────────────────────────────
 
+// Lookup de país a partir do prefixo ICAO. Cobre os principais países de aviação executiva.
+// Single-letter prefixes (K=US, C=CA, Y=AU) têm precedência sobre two-letter.
+const ICAO_SINGLE_PREFIX = { K:'US', C:'CA', Y:'AU' };
+const ICAO_TWO_PREFIX = {
+  // América do Sul
+  SB:'BR', SD:'BR', SI:'BR', SJ:'BR', SN:'BR', SS:'BR', SW:'BR',
+  SG:'PY', SA:'AR', SU:'UY', SC:'CL', SK:'CO', SP:'PE', SE:'EC', SV:'VE', SL:'BO',
+  SY:'GY', SM:'SR',
+  // América Central / Caribe / México
+  MM:'MX', MR:'MX', MD:'DO', MK:'CU', MT:'HT', MY:'BS', MZ:'BZ', MG:'GT', MH:'HN', MN:'NI', MP:'PA', MR_:'CR',
+  TJ:'PR', TX:'KY', TQ:'AI', TT:'TT',
+  // Europa
+  EG:'GB', EI:'IE', EH:'NL', EB:'BE', EL:'LU', ED:'DE', EK:'DK', EN:'NO', ES:'SE', EF:'FI', EE:'EE', EV:'LV', EY:'LT', EP:'PL',
+  LE:'ES', LF:'FR', LI:'IT', LP:'PT', LS:'CH', LO:'AT', LR:'RO', LK:'CZ', LZ:'SK', LH:'HU', LJ:'SI', LD:'HR', LQ:'BA', LY:'RS', LG:'GR', LT:'TR', LB:'BG', LM:'MT', LC:'CY', LA:'AL', LU:'MD', LN:'MC', LX:'GI',
+  UR:'RU', UU:'RU', US:'RU', UW:'RU', UN:'RU', UH:'RU', UE:'RU', UI:'RU', UO:'RU',
+  UK:'UA', UM:'BY',
+  // Oriente Médio / África
+  OM:'AE', OE:'SA', OO:'OM', OB:'BH', OK:'KW', OT:'QA', OI:'IR', OJ:'JO', OL:'LB', OP:'PK', OY:'YE', OR:'IQ',
+  LL:'IL',
+  HE:'EG', HK:'KE', HA:'ET', HC:'SO', HS:'SD', HU:'UG', HT:'TZ', HR:'RW',
+  GM:'MA', GO:'SN', GA:'ML', GB:'GM', GG:'GW', GU:'GN', GV:'CV', GL:'LR', GF:'SL', GE:'ES',
+  FA:'ZA', FB:'BW', FC:'CG', FD:'SZ', FE:'CF', FG:'GQ', FH:'GB', FI:'MU', FJ:'IO', FK:'CM', FL:'ZM', FM:'KM', FN:'AO', FO:'GA', FP:'ST', FQ:'MZ', FS:'SC', FT:'TD', FV:'ZW', FW:'MW', FX:'LS', FY:'NA', FZ:'CD',
+  // Ásia / Pacífico
+  ZB:'CN', ZG:'CN', ZH:'CN', ZL:'CN', ZP:'CN', ZS:'CN', ZU:'CN', ZW:'CN', ZJ:'CN', ZY:'CN',
+  RJ:'JP', RO:'JP', RK:'KR', RC:'TW', RP:'PH', RK_:'KR',
+  VA:'IN', VE:'IN', VI:'IN', VO:'IN', VT:'TH', VV:'VN', VL:'LA', VC:'LK', VG:'BD', VN:'NP', VQ:'BT', VM:'MO', VH:'HK', VR:'MV', VY:'MM', VD:'KH',
+  WA:'ID', WB:'MY', WI:'ID', WM:'MY', WP:'TL', WS:'SG', WR:'ID',
+};
+
+export function icaoCountry(icao) {
+  const code = (icao || '').toUpperCase();
+  if (!code || code.length < 2) return null;
+  // Tenta two-letter primeiro
+  const two = code.slice(0, 2);
+  if (ICAO_TWO_PREFIX[two]) return ICAO_TWO_PREFIX[two];
+  // Single-letter fallback (K/C/Y são códigos de país inteiros)
+  const first = code[0];
+  if (ICAO_SINGLE_PREFIX[first]) return ICAO_SINGLE_PREFIX[first];
+  return null;
+}
+
 // Auto-detecta flags da missão baseado nos legs (ICAO países, datas, PAX)
 export function detectMissionFlags(mission) {
   const legs = mission?.legs || [];
-  const isBrazilian = (icao) => /^(SB|SD|SI|SJ|SN|SS|SW)/.test((icao||'').toUpperCase());
-  const isUS = (icao) => /^K/.test((icao||'').toUpperCase());
   const flags = {
     international: false,
     operates_us: false,
@@ -1183,15 +1224,18 @@ export function detectMissionFlags(mission) {
     uses_handler: false,
   };
   for (const leg of legs) {
-    const o = (leg.departureIcao || '').toUpperCase();
-    const d = (leg.destinationIcao || '').toUpperCase();
-    const oBR = isBrazilian(o);
-    const dBR = isBrazilian(d);
-    if (o && d && oBR !== dBR) flags.international = true;
-    if (isUS(o) || isUS(d)) { flags.operates_us = true; flags.uses_handler = true; }
-    if (oBR || dBR) flags.operates_br = true;
-    if (oBR && d && !dBR) flags.exits_br = true;
-    if (o && !oBR && dBR) flags.enters_br = true;
+    const o = leg.departureIcao || '';
+    const d = leg.destinationIcao || '';
+    const oC = icaoCountry(o);
+    const dC = icaoCountry(d);
+    // Internacional: países diferentes em qualquer leg
+    if (o && d && oC && dC && oC !== dC) flags.international = true;
+    if (oC === 'US' || dC === 'US') { flags.operates_us = true; flags.uses_handler = true; }
+    if (oC === 'BR' || dC === 'BR') flags.operates_br = true;
+    if (oC === 'BR' && dC && dC !== 'BR') flags.exits_br = true;
+    if (oC && oC !== 'BR' && dC === 'BR') flags.enters_br = true;
+    // Handler: assumimos pra todo internacional + voos US
+    if (o && d && oC && dC && oC !== dC) flags.uses_handler = true;
   }
   // overnights = quando dateEnd > dateStart por > 0 dias
   if (mission?.dateStart && mission?.dateEnd) {
